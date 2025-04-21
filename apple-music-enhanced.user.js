@@ -1,8 +1,18 @@
 // ==UserScript==
 // @name Apple Music Enhanced
+// @name:zh-CN Apple Music 增强
+// @name:en Apple Music Enhanced
+// @name:ja Apple Music 拡張
+// @name:ko Apple Music 향상
+// @name:zh-TW Apple Music 增強
 // @namespace https://github.com/hu3rror/my-userscript
-// @version 2.1
+// @version 2.2.0
 // @description 增强Apple Music页面功能，提供ID复制和地区切换
+// @description:zh-CN 增强Apple Music页面功能，提供ID复制和地区切换
+// @description:en Enhance Apple Music page functionality, providing ID copy and region switch
+// @description:ja Apple Musicページの機能を強化し、IDコピーと地域切り替えを提供
+// @description:ko Apple Music 페이지 기능을 향상시켜 ID 복사 및 지역 전환을 제공합니다.
+// @description:zh-TW 增強Apple Music頁面功能，提供ID複製和地區切換
 // @match https://music.apple.com/*
 // @grant GM_setClipboard
 // @grant GM_addStyle
