@@ -2,7 +2,7 @@
 // @name            发送到 Memos
 // @name:en         Send to Memos
 // @namespace       http://tampermonkey.net/
-// @version         2.1
+// @version         2.4
 // @description     将选中的链接或文本发送到 Memos，支持配置、添加源页面信息和快速发送按钮
 // @description:en  Send selected links or text to Memos, supports configuration, adding source page information, and quick send buttons
 // @author          Hu3rror
@@ -16,41 +16,45 @@
 // @downloadURL https://update.greasyfork.org/scripts/533386/%E5%8F%91%E9%80%81%E5%88%B0%20Memos.user.js
 // @updateURL https://update.greasyfork.org/scripts/533386/%E5%8F%91%E9%80%81%E5%88%B0%20Memos.meta.js
 // ==/UserScript==
-
 (function() {
     'use strict';
 
     // 获取保存的配置或使用默认值
     const MEMOS_API_URL = GM_getValue('MEMOS_API_URL', '');
-    const API_TOKEN = GM_getValue('MEMOS_API_TOKEN', '');
+    const API_TOKEN = GM_getValue('API_TOKEN', '');
     let isConfigured = MEMOS_API_URL && API_TOKEN;
 
-    // 添加样式
+    // 检测系统颜色主题
+    function isDarkMode() {
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    // 添加样式（包含优化后的暗黑模式）
     GM_addStyle(`
         #memos-float-button {
             position: fixed;
-            width: 36px;  /* 调小按钮尺寸 */
-            height: 36px; /* 调小按钮尺寸 */
-            background-color: rgba(76, 175, 80, 0.7; /* 半透明效果 */
+            width: 36px;
+            height: 36px;
+            background-color: rgba(76, 175, 80, 0.7);
             color: white;
             border-radius: 50%;
             text-align: center;
-            line-height: 36px; /* 与按钮高度匹配 */
-            font-size: 16px; /* 调小字体 */
+            line-height: 36px;
+            font-size: 16px;
             font-weight: bold;
             cursor: pointer;
-            box-shadow: 1px 1px 3px rgba(0,0,0,0.2); /* 更轻微的阴影 */
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.2);
             z-index: 9999;
             user-select: none;
-            display: flex;
+            display: none; /* 初始状态隐藏 */
             align-items: center;
             justify-content: center;
             right: 20px;
             bottom: 20px;
-            transition: opacity 0.3s;
+            transition: all 0.3s ease;
         }
         #memos-float-button:hover {
-            background-color: rgba(69, 160, 73, 0.9); /* 悬停时略微不透明 */
+            background-color: rgba(69, 160, 73, 0.9);
             opacity: 1;
         }
         .memos-modal {
@@ -66,15 +70,22 @@
             z-index: 10000;
         }
         .memos-modal-content {
-            background-color: white;
             padding: 20px;
             border-radius: 8px;
             width: 400px;
             max-width: 90%;
+            transition: all 0.3s ease;
+        }
+        .memos-modal-content.light-mode {
+            background-color: white;
+            color: #333;
+        }
+        .memos-modal-content.dark-mode {
+            background-color: #1e1e1e;
+            color: #e0e0e0;
         }
         .memos-modal h2 {
             margin-top: 0;
-            color: #333;
         }
         .memos-form-group {
             margin-bottom: 15px;
@@ -89,15 +100,29 @@
             padding: 8px;
             border: 1px solid #ddd;
             border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        .memos-modal-content.light-mode .memos-form-group input {
+            background-color: white;
+            border-color: #ddd;
+            color: #333;
+        }
+        .memos-modal-content.dark-mode .memos-form-group input {
+            background-color: #2d2d2d;
+            border-color: #3d3d3d;
+            color: #e0e0e0;
         }
         .memos-button {
             padding: 8px 16px;
-            background-color: #4caf50;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             margin-right: 10px;
+            transition: all 0.3s ease;
+        }
+        .memos-button.save {
+            background-color: #4caf50;
         }
         .memos-button.cancel {
             background-color: #f44336;
@@ -109,6 +134,23 @@
             display: flex;
             justify-content: flex-end;
             margin-top: 20px;
+        }
+
+        /* 优化后的暗黑模式按钮样式 */
+        .dark-mode #memos-float-button {
+            background-color: rgba(60, 70, 60, 0.5); /* 更暗、更柔和的绿色 */
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        }
+        .dark-mode #memos-float-button:hover {
+            background-color: rgba(70, 80, 70, 0.7); /* 悬停时略微变亮 */
+        }
+
+        /* 暗黑模式下的模态框按钮 */
+        .memos-modal-content.dark-mode .memos-button.save {
+            background-color: #3a7d3f; /* 更暗的绿色 */
+        }
+        .memos-modal-content.dark-mode .memos-button.cancel {
+            background-color: #c53929; /* 更暗的红色 */
         }
     `);
 
@@ -232,7 +274,7 @@
 
         // 创建模态框内容
         const modalContent = document.createElement('div');
-        modalContent.className = 'memos-modal-content';
+        modalContent.className = `memos-modal-content ${isDarkMode() ? 'dark-mode' : 'light-mode'}`;
 
         modalContent.innerHTML = `
             <h2>配置 Memos API</h2>
@@ -254,11 +296,19 @@
         modal.appendChild(modalContent);
         document.body.appendChild(modal);
 
+        // 监听系统颜色模式变化
+        const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        const handleColorSchemeChange = (e) => {
+            modalContent.className = `memos-modal-content ${e.matches ? 'dark-mode' : 'light-mode'}`;
+        };
+        colorSchemeQuery.addEventListener('change', handleColorSchemeChange);
+
         // 添加事件监听器
         const cancelButton = modalContent.querySelector('.memos-button.cancel');
         const saveButton = modalContent.querySelector('.memos-button.save');
 
         cancelButton.addEventListener('click', function() {
+            colorSchemeQuery.removeEventListener('change', handleColorSchemeChange);
             modal.remove();
         });
 
@@ -272,10 +322,11 @@
             }
 
             GM_setValue('MEMOS_API_URL', apiUrl);
-            GM_setValue('MEMOS_API_TOKEN', apiToken);
+            GM_setValue('API_TOKEN', apiToken);
             isConfigured = true;
 
             showNotification('配置已保存');
+            colorSchemeQuery.removeEventListener('change', handleColorSchemeChange);
             modal.remove();
 
             // 检查并创建浮动按钮（仅当配置完成时）
@@ -289,13 +340,11 @@
         if (document.getElementById('memos-float-button')) {
             return;
         }
-
         const floatButton = document.createElement('div');
         floatButton.id = 'memos-float-button';
         floatButton.textContent = 'M';
         floatButton.title = '发送到 Memos';
         document.body.appendChild(floatButton);
-
         // 应用保存的位置
         const savedPosition = GM_getValue('MEMOS_BUTTON_POSITION', null);
         if (savedPosition) {
@@ -304,37 +353,35 @@
             floatButton.style.right = 'auto';
             floatButton.style.bottom = 'auto';
         }
-
         // 添加点击事件
-        floatButton.addEventListener('click', handleSendAction);
-
+        floatButton.addEventListener('click', function(e) {
+            if (!floatButton.isDragging) {
+                handleSendAction();
+            }
+        });
         // 添加拖动功能
         let isDragging = false;
         let offsetX, offsetY;
-
         floatButton.addEventListener('mousedown', function(e) {
             isDragging = true;
+            floatButton.isDragging = true; // 添加一个标志
             offsetX = e.clientX - floatButton.getBoundingClientRect().left;
             offsetY = e.clientY - floatButton.getBoundingClientRect().top;
             e.preventDefault(); // 防止选中文本
         });
-
         document.addEventListener('mousemove', function(e) {
             if (isDragging) {
                 const x = e.clientX - offsetX;
                 const y = e.clientY - offsetY;
-
                 // 确保按钮不会超出视口
                 const maxX = window.innerWidth - floatButton.offsetWidth;
                 const maxY = window.innerHeight - floatButton.offsetHeight;
-
                 floatButton.style.left = Math.min(Math.max(0, x), maxX) + 'px';
                 floatButton.style.right = 'auto';
                 floatButton.style.top = Math.min(Math.max(0, y), maxY) + 'px';
                 floatButton.style.bottom = 'auto';
             }
         });
-
         document.addEventListener('mouseup', function() {
             if (isDragging) {
                 // 保存按钮位置
@@ -344,7 +391,21 @@
                 });
                 isDragging = false;
             }
+            floatButton.isDragging = false; // 拖动结束，重置标志
         });
+        // 监听系统颜色模式变化并更新按钮样式
+        const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        const updateButtonStyle = (e) => {
+            if (e.matches) {
+                document.body.classList.add('dark-mode');
+            } else {
+                document.body.classList.remove('dark-mode');
+            }
+        };
+
+        // 初始设置
+        updateButtonStyle(colorSchemeQuery);
+        colorSchemeQuery.addEventListener('change', updateButtonStyle);
     }
 
     // 更新浮动按钮 - 仅当配置完成时显示
@@ -359,10 +420,36 @@
         }
     }
 
+    // 监听选中文本事件
+    document.addEventListener('mouseup', function() {
+        const selectedText = getSelectedText();
+        const floatButton = document.getElementById('memos-float-button');
+
+        if (selectedText && isConfigured) {
+            // 如果有选中文本且已配置，显示按钮
+            if (!floatButton) {
+                createFloatButton(); // 如果按钮不存在则创建
+            }
+            floatButton.style.display = 'flex';
+        } else {
+            // 如果没有选中文本或未配置，隐藏按钮
+            if (floatButton) {
+                floatButton.style.display = 'none';
+            }
+        }
+    });
+
     // 初始化 - 不自动弹出配置窗口，只检查是否已配置并决定是否显示浮动按钮
     function init() {
-        if (isConfigured) {
+        // 首次加载时，检查是否有选中文本，并决定是否显示按钮
+        const selectedText = getSelectedText();
+        if (selectedText && isConfigured) {
             createFloatButton();
+            const floatButton = document.getElementById('memos-float-button');
+            if(floatButton){
+                 floatButton.style.display = 'flex';
+            }
+
         }
     }
 
