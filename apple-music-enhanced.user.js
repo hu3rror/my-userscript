@@ -6,7 +6,7 @@
 // @name:ko Apple Music 향상
 // @name:zh-TW Apple Music 增強
 // @namespace https://github.com/hu3rror/my-userscript
-// @version 2.2.0
+// @version 2.2.1
 // @description 增强Apple Music页面功能，提供ID复制和地区切换
 // @description:zh-CN 增强Apple Music页面功能，提供ID复制和地区切换
 // @description:en Enhance Apple Music page functionality, providing ID copy and region switch

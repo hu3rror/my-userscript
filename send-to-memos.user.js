@@ -2,7 +2,7 @@
 // @name            发送到 Memos
 // @name:en         Send to Memos
 // @namespace       https://github.com/hu3rror/my-userscript
-// @version         2.5
+// @version         2.6.0
 // @description     将选中的链接或文本发送到 Memos，支持配置、添加源页面信息和快速发送按钮
 // @description:en  Send selected links or text to Memos, supports configuration, adding source page information, and quick send buttons
 // @author          Hu3rror
