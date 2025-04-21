@@ -17,8 +17,8 @@
 // @grant GM_setClipboard
 // @grant GM_addStyle
 // @license MIT
-// @downloadURL https://update.greasyfork.org/scripts/499970/Apple%20Music%20Enhanced.user.js
-// @updateURL https://update.greasyfork.org/scripts/499970/Apple%20Music%20Enhanced.meta.js
+// @homepageURL   https://github.com/hu3rror/my-userscript
+// @supportURL   https://github.com/hu3rror/my-userscript/issues
 // ==/UserScript==
 
 (function () {
