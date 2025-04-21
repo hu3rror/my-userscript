@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name Apple Music Enhanced
-// @namespace http://tampermonkey.net/
-// @version 2.0
+// @namespace https://github.com/hu3rror/my-userscript
+// @version 2.1
 // @description 增强Apple Music页面功能，提供ID复制和地区切换
 // @match https://music.apple.com/*
 // @grant GM_setClipboard
 // @grant GM_addStyle
-// @license GNU GPLv3
+// @license MIT
 // @downloadURL https://update.greasyfork.org/scripts/499970/Apple%20Music%20Enhanced.user.js
 // @updateURL https://update.greasyfork.org/scripts/499970/Apple%20Music%20Enhanced.meta.js
 // ==/UserScript==
