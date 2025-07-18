@@ -1,30 +1,63 @@
 // ==UserScript==
-// @name Apple Music Enhanced
-// @name:zh-CN Apple Music 增强
-// @name:en Apple Music Enhanced
-// @name:ja Apple Music 拡張
-// @name:ko Apple Music 향상
-// @name:zh-TW Apple Music 增強
-// @namespace https://github.com/hu3rror/my-userscript
-// @version 2.2.1
-// @description 增强Apple Music页面功能，提供ID复制和地区切换
-// @description:zh-CN 增强Apple Music页面功能，提供ID复制和地区切换
-// @description:en Enhance Apple Music page functionality, providing ID copy and region switch
-// @description:ja Apple Musicページの機能を強化し、IDコピーと地域切り替えを提供
-// @description:ko Apple Music 페이지 기능을 향상시켜 ID 복사 및 지역 전환을 제공합니다.
-// @description:zh-TW 增強Apple Music頁面功能，提供ID複製和地區切換
-// @match https://music.apple.com/*
-// @grant GM_setClipboard
-// @grant GM_addStyle
-// @license MIT
-// @homepageURL   https://github.com/hu3rror/my-userscript
+// @name         Apple Music Enhanced
+// @name:zh-CN   Apple Music 增强
+// @name:en      Apple Music Enhanced
+// @name:ja      Apple Music 拡張
+// @name:ko      Apple Music 향상
+// @name:zh-TW   Apple Music 增強
+// @namespace    https://github.com/hu3rror/my-userscript
+// @version      2.3.0
+// @description  Enhance Apple Music page functionality with ID copying and region switching.
+// @description:zh-CN 增强Apple Music页面功能，提供ID复制和地区切换。
+// @description:en   Enhance Apple Music page functionality, providing ID copy and region switch.
+// @description:ja   Apple Musicページの機能を強化し、IDコピーと地域切り替えを提供。
+// @description:ko   Apple Music 페이지 기능을 향상시켜 ID 복사 및 지역 전환을 제공합니다.
+// @description:zh-TW 增強Apple Music頁面功能，提供ID複製和地區切換。
+// @match        https://music.apple.com/*
+// @grant        GM_setClipboard
+// @grant        GM_addStyle
+// @license      MIT
+// @homepageURL  https://github.com/hu3rror/my-userscript
 // @supportURL   https://github.com/hu3rror/my-userscript/issues
 // ==/UserScript==
 
 (function () {
     'use strict';
 
-    // 定义可用地区
+    // --- Internationalization (i18n) ---
+    const translations = {
+        'en': {
+            copyId: 'Copy ID',
+            idCopied: 'ID Copied',
+            idNotFound: 'ID Not Found',
+            copyAlbumIdTitle: 'Copy Album ID',
+            switchRegion: 'Switch Region',
+            regionLinkCopied: (regionName) => `${regionName} link copied`,
+            copyRegionLinkTitle: (regionName) => `Copy ${regionName} Link`
+        },
+        'zh': {
+            copyId: '复制ID',
+            idCopied: 'ID已复制',
+            idNotFound: '未找到ID',
+            copyAlbumIdTitle: '复制专辑ID',
+            switchRegion: '切换地区',
+            regionLinkCopied: (regionName) => `${regionName} 链接已复制`,
+            copyRegionLinkTitle: (regionName) => `复制 ${regionName} 链接`
+        }
+    };
+
+    function getLang() {
+        const lang = navigator.language.split('-')[0];
+        return translations[lang] ? lang : 'en'; // Default to English
+    }
+
+    const lang = getLang();
+    const i18n = translations[lang];
+
+    // --- End of i18n ---
+
+
+    // Define available regions
     const regions = [
         { name: '🇭🇰', code: 'hk', fullName: 'Hongkong' },
         { name: '🇯🇵', code: 'jp', fullName: 'Japan' },
@@ -32,7 +65,7 @@
         { name: '🇨🇳', code: 'cn', fullName: 'China' }
     ];
 
-    // 添加样式
+    // Add styles
     GM_addStyle(`
         .region-switcher {
             background-color: #1c1c1e;
@@ -103,7 +136,7 @@
         }
     `);
 
-    // 创建通用按钮
+    // Create a generic button
     function createButton(text, onClick, title) {
         const button = document.createElement('button');
         button.textContent = text;
@@ -113,7 +146,7 @@
         return button;
     }
 
-    // 显示反馈消息
+    // Show feedback message
     function showFeedback(message) {
         const existingFeedback = document.querySelector('.feedback-message');
         if (existingFeedback) {
@@ -131,51 +164,51 @@
         }, 2000);
     }
 
-    // 获取专辑ID
+    // Get Album ID from URL
     function getAlbumId(url) {
         const match = url.match(/\/album\/.*?\/(\d+)(?:\?i=\d+)?$/);
         return match ? match[1] : null;
     }
 
-    // 添加按钮到页面
+    // Add buttons to the page
     function addButtons() {
-        // 检查按钮容器是否已存在
+        // Check if the button container already exists
         const existingContainer = document.querySelector('#buttons-container');
         if (existingContainer) return;
 
-        // 查找插入点
+        // Find the insertion point
         const previewButton = document.querySelector('button[data-testid="click-action"]');
         if (!previewButton) return;
 
-        // 创建按钮容器
+        // Create a container for the buttons
         const container = document.createElement('div');
         container.id = 'buttons-container';
 
-        // 添加复制ID按钮
-        const copyIdButton = createButton('复制ID', function () {
+        // Add "Copy ID" button
+        const copyIdButton = createButton(i18n.copyId, function () {
             const albumId = getAlbumId(window.location.href);
             if (albumId) {
                 GM_setClipboard(albumId);
-                showFeedback('ID已复制');
+                showFeedback(i18n.idCopied);
             } else {
-                showFeedback('未找到ID');
+                showFeedback(i18n.idNotFound);
             }
-        }, '复制专辑ID');
+        }, i18n.copyAlbumIdTitle);
         container.appendChild(copyIdButton);
 
-        // 创建地区选择器
+        // Create region switcher
         const regionSwitcher = document.createElement('select');
         regionSwitcher.className = 'region-switcher';
 
-        // 添加默认选项
+        // Add default option
         const defaultOption = document.createElement('option');
-        defaultOption.textContent = '切换地区';
+        defaultOption.textContent = i18n.switchRegion;
         defaultOption.value = '';
         defaultOption.disabled = true;
         defaultOption.selected = true;
         regionSwitcher.appendChild(defaultOption);
 
-        // 添加地区选项
+        // Add region options
         regions.forEach(region => {
             const option = document.createElement('option');
             option.value = region.code;
@@ -183,7 +216,7 @@
             regionSwitcher.appendChild(option);
         });
 
-        // 添加地区切换事件
+        // Add region switch event listener
         regionSwitcher.addEventListener('change', function() {
             if (this.value) {
                 const currentUrl = window.location.href;
@@ -194,10 +227,9 @@
                 window.location.href = newUrl;
             }
         });
-
         container.appendChild(regionSwitcher);
 
-        // 添加区域复制按钮
+        // Add region copy buttons
         regions.forEach(region => {
             const regionCopyButton = createButton(region.name, function () {
                 const currentUrl = window.location.href.split('?')[0];
@@ -206,25 +238,25 @@
                     `//music.apple.com/${region.code}`
                 );
                 GM_setClipboard(newUrl);
-                showFeedback(`${region.fullName} 链接已复制`);
-            }, `复制 ${region.fullName} 链接`);
+                showFeedback(i18n.regionLinkCopied(region.fullName));
+            }, i18n.copyRegionLinkTitle(region.fullName));
             container.appendChild(regionCopyButton);
         });
 
-        // 将按钮容器添加到页面
+        // Insert the button container into the page
         previewButton.parentNode.insertAdjacentElement('afterend', container);
     }
 
-    // 持续检查并添加按钮
+    // Persistently check and add buttons
     function persistentlyAddButtons() {
         addButtons();
         setTimeout(persistentlyAddButtons, 1000);
     }
 
-    // 初始化
+    // Initialization
     persistentlyAddButtons();
 
-    // 监听URL变化
+    // Listen for URL changes
     let lastUrl = location.href;
     new MutationObserver(() => {
         const url = location.href;
@@ -233,4 +265,5 @@
             setTimeout(addButtons, 1000);
         }
     }).observe(document, { subtree: true, childList: true });
+
 })();
