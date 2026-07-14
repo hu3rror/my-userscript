@@ -2,7 +2,7 @@
 // @name                    Jump to DeepWiki from Github (Optimized)
 // @name:zh-CN              Github 跳转至 DeepWiki (极速优化版)
 // @namespace               https://github.com/hu3rror
-// @version                 0.2.1
+// @version                 0.2.2
 // @description             Add an anchor to jump to DeepWiki from Github. Optimized for branch switching and fast loading.
 // @description:zh-CN       在 Github 页面添加一个链接，跳转至 DeepWiki。针对分支切换与加载速度进行了深度优化。
 // @author                  Hu3rror (Original script by shiquda)
@@ -11,6 +11,7 @@
 // @run-at                  document-end
 // @downloadURL             https://raw.githubusercontent.com/hu3rror/my-userscript/main/jump-to-deepwiki.user.js
 // @updateURL               https://raw.githubusercontent.com/hu3rror/my-userscript/main/jump-to-deepwiki.user.js
+// @homepageURL             https://github.com/hu3rror/my-userscript
 // ==/UserScript==
 
 /*
