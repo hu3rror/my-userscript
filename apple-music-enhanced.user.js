@@ -1,25 +1,20 @@
 // ==UserScript==
-// @name         Apple Music Enhanced
-// @name:zh-CN   Apple Music 增强
-// @name:en      Apple Music Enhanced
-// @name:ja      Apple Music 拡張
-// @name:ko      Apple Music 향상
-// @name:zh-TW   Apple Music 增強
+// @name         Apple Music Link Helper
+// @name:zh-CN   Apple Music 链接助手
+// @name:zh-TW   Apple Music 連結助手
+// @name:ja      Apple Music リンク助手
 // @namespace    https://github.com/hu3rror/my-userscript
-// @version      2.4.0
-// @description  Enhance Apple Music page functionality with ID copying and region switching.
-// @description:zh-CN 增强Apple Music页面功能，提供ID复制和地区切换。
-// @description:en   Enhance Apple Music page functionality, providing ID copy and region switch.
-// @description:ja   Apple Musicページの機能を強化し、IDコピーと地域切り替えを提供。
-// @description:ko   Apple Music 페이지 기능을 향상시켜 ID 복사 및 지역 전환을 제공합니다.
-// @description:zh-TW 增強Apple Music頁面功能，提供ID複製和地區切換。
+// @version      2.4.1
+// @description  Copy ID, switch regions, and copy links for different countries on Apple Music.
+// @description:zh-CN 快速复制 Apple Music 页面 ID、切换或复制不同国家/地区的歌曲链接。
+// @description:zh-TW 快速複製 Apple Music 頁面 ID、切換或複製不同國家/地區的歌曲連結。
+// @description:ja   Apple Music ページで ID コピー、地域切り替え、および地域限定リンクのコピーを簡単に行えます。
 // @match        https://music.apple.com/*
 // @match        https://beta.music.apple.com/*
 // @grant        GM_setClipboard
 // @grant        GM_addStyle
 // @license      MIT
 // @homepageURL  https://github.com/hu3rror/my-userscript
-// @supportURL   https://github.com/hu3rror/my-userscript/issues
 // ==/UserScript==
 
 (function () {
@@ -50,6 +45,18 @@
             copyLinkHint: '输入地区简称回车复制',
             regionLinkCopied: (regionName) => `${regionName} 链接已复制`,
             copyRegionLinkTitle: (regionName) => `复制 ${regionName} 链接`
+        },
+        'ja': {
+            copyId: 'IDコピー',
+            idCopied: 'IDをコピーしました',
+            idNotFound: 'IDが見つかりません',
+            copyAlbumIdTitle: 'アルバムIDをコピー',
+            switchRegion: '地域を切り替え',
+            manualInput: '手動入力...',
+            manualInputHint: '地域を入力してEnter',
+            copyLinkHint: '地域を入力してEnterでコピー',
+            regionLinkCopied: (regionName) => `${regionName} のリンクをコピーしました`,
+            copyRegionLinkTitle: (regionName) => `${regionName} のリンクをコピー`
         }
     };
 
