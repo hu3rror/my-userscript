@@ -5,7 +5,7 @@
 // @name:zh-CN    Google 搜索增强套件
 // @name:zh-TW    Google 搜尋增強套件
 // @namespace     https://github.com/your-github-username
-// @version       3.3.1
+// @version       3.3.2
 // @description   增强Google搜索功能：扩展时间范围选项、自动展开工具菜单、多语言支持
 // @description:en Enhance Google Search: Extended time ranges, auto-expand tools menu, multi-language support
 // @description:ja Google検索の拡張機能：期間指定オプションの追加、ツールメニューの自動展開、多言語対応

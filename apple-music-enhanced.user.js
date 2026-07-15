@@ -4,7 +4,7 @@
 // @name:zh-TW   Apple Music 連結助手
 // @name:ja      Apple Music リンク助手
 // @namespace    https://github.com/hu3rror/my-userscript
-// @version      2.4.1
+// @version      2.4.2
 // @description  Copy ID, switch regions, and copy links for different countries on Apple Music.
 // @description:zh-CN 快速复制 Apple Music 页面 ID、切换或复制不同国家/地区的歌曲链接。
 // @description:zh-TW 快速複製 Apple Music 頁面 ID、切換或複製不同國家/地區的歌曲連結。

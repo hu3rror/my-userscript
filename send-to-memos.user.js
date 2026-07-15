@@ -2,7 +2,7 @@
 // @name            发送到 Memos
 // @name:en         Send to Memos
 // @namespace       https://github.com/hu3rror/my-userscript
-// @version         2.7.0
+// @version         2.7.1
 // @description     将选中的富文本（含列表、链接、代码等）、链接或文本发送到 Memos，支持智能代码高亮、防丢草稿与极致性能复用设计
 // @description:en  Send selected rich text (including lists, links, code, etc.), links, or text to Memos, supports smart code highlighting, draft saving, and optimized UI recycling
 // @author          Hu3rror
