@@ -2,7 +2,7 @@
 // @name                    SteamDB DLC List Extractor
 // @name:zh-CN              SteamDB DLC 清单提取器
 // @namespace               https://github.com/hu3rror
-// @version                 1.0.0
+// @version                 1.0.1
 // @description             Extract DLC list from SteamDB with easy config generator for CreamAPI/GreenLuma.
 // @description:zh-CN       在 SteamDB 页面中批量提取 DLC 列表，支持一键生成并复制 CreamAPI、GreenLuma 等补丁所需的配置文件。
 // @author                  Hu3rror

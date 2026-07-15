@@ -264,7 +264,7 @@
         manualSwitchInput.style.display = 'none'; // Hide it initially
 
         // Event listener for the manual input
-        manualSwitchInput.addEventListener('keydown', function(event) {
+        manualSwitchInput.addEventListener('keydown', function (event) {
             if (event.key === 'Enter' && this.value.trim() !== '') {
                 const regionCode = this.value.trim().toLowerCase();
                 const currentUrl = window.location.href;
@@ -277,14 +277,14 @@
         });
 
         // Event listener for when the input loses focus
-        manualSwitchInput.addEventListener('blur', function() {
+        manualSwitchInput.addEventListener('blur', function () {
             this.style.display = 'none';
             regionSwitcher.style.display = '';
             regionSwitcher.value = ''; // Reset dropdown
         });
 
         // Add region switch event listener for the dropdown
-        regionSwitcher.addEventListener('change', function() {
+        regionSwitcher.addEventListener('change', function () {
             if (this.value === 'manual') {
                 // Switch to manual input mode
                 this.style.display = 'none';
@@ -327,7 +327,7 @@
         manualCopyInput.className = 'region-input';
         manualCopyInput.placeholder = i18n.copyLinkHint;
 
-        manualCopyInput.addEventListener('keydown', function(event) {
+        manualCopyInput.addEventListener('keydown', function (event) {
             if (event.key === 'Enter' && this.value.trim() !== '') {
                 const regionCode = this.value.trim().toLowerCase();
                 const currentUrl = window.location.href.split('?')[0];

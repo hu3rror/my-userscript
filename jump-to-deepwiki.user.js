@@ -33,7 +33,7 @@
     function getRepoDetails() {
         const path = window.location.pathname;
         const segments = path.split('/').filter(Boolean);
-        
+
         // 仓库路径至少需要有 [owner, repo] 两个部分
         if (segments.length < 2) return null;
 
@@ -41,9 +41,9 @@
 
         // 过滤掉 GitHub 的顶级保留非仓库页面
         const blacklist = new Set([
-            'settings', 'notifications', 'search', 'explore', 'trending', 
-            'pulls', 'issues', 'marketplace', 'organizations', 'sponsors', 
-            'features', 'customer-stories', 'readme', 'about', 'enterprise', 
+            'settings', 'notifications', 'search', 'explore', 'trending',
+            'pulls', 'issues', 'marketplace', 'organizations', 'sponsors',
+            'features', 'customer-stories', 'readme', 'about', 'enterprise',
             'pricing', 'contact', 'git-lfs', 'personal-files', 'topics',
             'collections', 'events', 'community', 'gists'
         ]);
@@ -102,7 +102,7 @@
     function createOrUpdateBtn(pageheadActions, id, url, textContent, svgCreator) {
         const className = `js-jump-to-${id}-anchor`;
         const existingAnchor = document.querySelector(`.${className}`);
-        
+
         // 如果链接已经存在，则检查并更新 href（防止 SPA 切换时链接失效）
         if (existingAnchor) {
             if (existingAnchor.href !== url) {

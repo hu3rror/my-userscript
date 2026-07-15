@@ -17,7 +17,7 @@
 // @updateURL       https://raw.githubusercontent.com/hu3rror/my-userscript/main/send-to-memos.user.js
 // @homepageURL     https://github.com/hu3rror/my-userscript
 // ==/UserScript==
-(function() {
+(function () {
     'use strict';
 
     // 获取保存的配置或使用默认值
@@ -217,13 +217,13 @@
         try {
             const sel = window.getSelection();
             if (!sel || sel.rangeCount === 0) return null;
-            
+
             const range = sel.getRangeAt(0);
             const container = range.commonAncestorContainer;
-            
+
             const element = container.nodeType === 1 ? container : container.parentElement;
             if (!element) return null;
-            
+
             const codeElement = element.closest('pre, code');
             if (codeElement) {
                 const className = codeElement.className || '';
@@ -255,7 +255,7 @@
         // 处理元素节点
         if (node.nodeType === 1) {
             const tagName = node.tagName.toLowerCase();
-            
+
             // 安全过滤：拦截可能携带恶意执行逻辑或产生不必要样式的活性标签
             if (['script', 'style', 'noscript', 'iframe', 'object', 'embed'].includes(tagName)) {
                 return '';
@@ -265,16 +265,16 @@
             let nextListType = listType;
             if (tagName === 'ul') nextListType = 'ul';
             if (tagName === 'ol') nextListType = 'ol';
-            
+
             let liCounter = 1;
             for (let i = 0; i < node.childNodes.length; i++) {
                 const child = node.childNodes[i];
-                
+
                 // 忽略列表下无意义的空白文本节点，切断列表中多余空行的产生源头
                 if ((tagName === 'ul' || tagName === 'ol') && child.nodeType === 3 && !child.nodeValue.trim()) {
                     continue;
                 }
-                
+
                 if (child.nodeType === 1 && child.tagName.toLowerCase() === 'li') {
                     childrenMarkdown += htmlToMarkdown(child, nextListType, liCounter++, depth + 1);
                 } else {
@@ -354,20 +354,20 @@
         try {
             const sel = window.getSelection();
             if (!sel || sel.rangeCount === 0) return '';
-            
+
             const range = sel.getRangeAt(0);
             const container = document.createElement('div');
             container.appendChild(range.cloneContents());
-            
+
             let markdown = htmlToMarkdown(container).trim();
-            
+
             // 智能消除多层级列表项之间残留的繁杂空行
             markdown = markdown.replace(/(^(\s*)-\s+.*)\n\s*\n(?=\s*-\s+)/gm, '$1\n');
             markdown = markdown.replace(/(^(\s*)\d+\.\s+.*)\n\s*\n(?=\s*\d+\.\s+)/gm, '$1\n');
-            
+
             // 去除连续的多段空行
             markdown = markdown.replace(/\n{3,}/g, '\n\n');
-            
+
             return markdown;
         } catch (e) {
             console.error('[Memos] 转换选区至 Markdown 时出错:', e);
@@ -379,9 +379,9 @@
     function getPageMetadata() {
         const title = document.title || '无标题页面';
         const url = window.location.href;
-        const meta = document.querySelector('meta[name="description"]') || 
-                     document.querySelector('meta[property="og:description"]') ||
-                     document.querySelector('meta[name="twitter:description"]');
+        const meta = document.querySelector('meta[name="description"]') ||
+            document.querySelector('meta[property="og:description"]') ||
+            document.querySelector('meta[name="twitter:description"]');
         const contentAttr = meta ? meta.getAttribute('content') : null;
         const description = contentAttr ? contentAttr.trim() : '';
         return { title: escapeMarkdownTitle(title), url, description: escapeMarkdownTitle(description) };
@@ -418,7 +418,7 @@
                 content: content,
                 visibility: 'PRIVATE'
             }),
-            onload: function(response) {
+            onload: function (response) {
                 if (response.status === 200 || response.status === 201) {
                     showNotification('成功发送到 Memos！');
                     setFloatButtonState('success');
@@ -428,7 +428,7 @@
                     setFloatButtonState('error');
                 }
             },
-            onerror: function(error) {
+            onerror: function (error) {
                 showNotification('发送到 Memos 时出错: ' + error, true);
                 setFloatButtonState('error');
             }
@@ -439,16 +439,16 @@
     let currentLink = null;
 
     // 监听右键点击事件，捕获链接
-    document.addEventListener('contextmenu', function(event) {
+    document.addEventListener('contextmenu', function (event) {
         currentLink = event.target.closest('a');
     }, false);
 
     // 注册菜单命令
-    GM_registerMenuCommand('发送选中内容到 Memos', function() {
+    GM_registerMenuCommand('发送选中内容到 Memos', function () {
         handleSendAction();
     });
 
-    GM_registerMenuCommand('配置 Memos API', function() {
+    GM_registerMenuCommand('配置 Memos API', function () {
         showConfigModal();
     });
 
@@ -486,7 +486,7 @@
     }
 
     // 清理 currentLink
-    document.addEventListener('click', function() {
+    document.addEventListener('click', function () {
         currentLink = null;
     }, false);
 
@@ -533,7 +533,7 @@
 
             cancelButton.addEventListener('click', closeConfigModal);
 
-            saveButton.addEventListener('click', function() {
+            saveButton.addEventListener('click', function () {
                 const apiUrl = apiUrlInput.value.trim();
                 const apiToken = apiTokenInput.value.trim();
 
@@ -624,13 +624,13 @@
                 modalContent.className = `memos-modal-content ${e.matches ? 'dark-mode' : 'light-mode'}`;
             });
 
-            textarea.addEventListener('input', function() {
+            textarea.addEventListener('input', function () {
                 GM_setValue('MEMOS_DRAFT', textarea.value);
             });
 
             cancelButton.addEventListener('click', closeQuickInputModal);
 
-            sendButton.addEventListener('click', function() {
+            sendButton.addEventListener('click', function () {
                 const content = textarea.value.trim();
                 if (!content) {
                     showNotification('内容不能为空', true);
@@ -639,9 +639,9 @@
                 const meta = getPageMetadata();
                 const formattedContent = `#笔记 📝 ${content}\n\n---\n**来源**：[${meta.title}](${meta.url})`;
 
-                sendToMemos(formattedContent, function() {
-                    GM_setValue('MEMOS_DRAFT', ''); 
-                    textarea.value = ''; 
+                sendToMemos(formattedContent, function () {
+                    GM_setValue('MEMOS_DRAFT', '');
+                    textarea.value = '';
                 });
                 closeQuickInputModal();
             });
@@ -703,7 +703,7 @@
         let isDragging = false;
         let hasMoved = false;
         let offsetX, offsetY;
-        
+
         let buttonWidth = 36;
         let buttonHeight = 36;
 
@@ -714,7 +714,7 @@
                 const y = e.clientY - offsetY;
                 const maxX = window.innerWidth - buttonWidth;
                 const maxY = window.innerHeight - buttonHeight;
-                
+
                 floatButton.style.left = Math.min(Math.max(0, x), maxX) + 'px';
                 floatButton.style.top = Math.min(Math.max(0, y), maxY) + 'px';
                 floatButton.style.right = 'auto';
@@ -739,10 +739,10 @@
             }
         }
 
-        floatButton.addEventListener('mousedown', function(e) {
+        floatButton.addEventListener('mousedown', function (e) {
             isDragging = true;
             hasMoved = false;
-            
+
             const rect = floatButton.getBoundingClientRect();
             buttonWidth = rect.width;
             buttonHeight = rect.height;
@@ -757,8 +757,8 @@
 
         let clickTimer = null;
 
-        floatButton.addEventListener('click', function() {
-            if (hasMoved) return; 
+        floatButton.addEventListener('click', function () {
+            if (hasMoved) return;
 
             if (clickTimer) {
                 clearTimeout(clickTimer);
@@ -804,7 +804,7 @@
         }
     }
 
-    document.addEventListener('mouseup', function() {
+    document.addEventListener('mouseup', function () {
         if (!isConfigured || !cachedFloatButton) return;
 
         const selectedText = getSelectedText();

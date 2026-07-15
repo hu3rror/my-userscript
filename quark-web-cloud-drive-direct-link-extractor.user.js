@@ -21,7 +21,7 @@
 // @homepageURL             https://github.com/hu3rror/my-userscript
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     // 官方 Gopeed 提取的客户端真实 UA
@@ -83,7 +83,7 @@
     // ================== 基础工具 ==================
     const sizeFormat = (value) => {
         if (typeof value === 'number' && !isNaN(value)) {
-            let unit = [ "B", "KB", "MB", "GB", "TB" ], index = Math.floor(Math.log(value) / Math.log(1024));
+            let unit = ["B", "KB", "MB", "GB", "TB"], index = Math.floor(Math.log(value) / Math.log(1024));
             return `${(value / Math.pow(1024, index)).toFixed(2)} ${unit[index]}`;
         }
         return "";
