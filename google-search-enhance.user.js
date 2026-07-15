@@ -17,7 +17,6 @@
 // @icon          https://www.google.com/favicon.ico
 // @grant         none
 // @homepageURL   https://github.com/hu3rror/my-userscript
-// @supportURL   https://github.com/hu3rror/my-userscript/issues
 // ==/UserScript==
 
 
