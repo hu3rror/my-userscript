@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                    Quark Web Cloud Drive Direct Link Extractor (Lite)
-// @name:zh-CN              夸克网盘网页版直链提取器 (精简版)
+// @name                    Quark Web Cloud Drive Direct Link Extractor
+// @name:zh-CN              夸克网盘网页版直链提取器
 // @namespace               https://github.com/hu3rror
 // @version                 1.0.2
 // @description             Extract direct download links from Quark Web Cloud Drive with easy copier for Gopeed/IDM.
