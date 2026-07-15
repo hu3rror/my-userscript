@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name                    Jump to DeepWiki and zread.ai from Github (Optimized)
-// @name:zh-CN              Github 跳转至 DeepWiki / zread.ai (极速优化版)
+// @name                    Jump to DeepWiki and zread.ai from Github
+// @name:zh-CN              Github 跳转至 DeepWiki / zread.ai
 // @namespace               https://github.com/hu3rror
 // @version                 0.3.0
 // @description             Add anchors to jump to DeepWiki and zread.ai from Github. Optimized for branch switching and fast loading.
