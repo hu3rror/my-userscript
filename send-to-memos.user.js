@@ -13,10 +13,9 @@
 // @grant           GM_setValue
 // @grant           GM_addStyle
 // @license         MIT
+// @downloadURL     https://raw.githubusercontent.com/hu3rror/my-userscript/main/send-to-memos.user.js
+// @updateURL       https://raw.githubusercontent.com/hu3rror/my-userscript/main/send-to-memos.user.js
 // @homepageURL     https://github.com/hu3rror/my-userscript
-// @supportURL      https://github.com/hu3rror/my-userscript/issues
-// @downloadURL     https://update.greasyfork.org/scripts/533386/%E5%8F%91%E9%80%81%E5%88%B0%20Memos.user.js
-// @updateURL       https://update.greasyfork.org/scripts/533386/%E5%8F%91%E9%80%81%E5%88%B0%20Memos.meta.js
 // ==/UserScript==
 (function() {
     'use strict';
