@@ -23,6 +23,9 @@
 (function () {
     'use strict';
 
+    // ------------------------------------------------------------------
+    // 配置读取：不缓存为顶层 const，每次都实时读库，避免"改配置不刷新页面就不生效"的问题
+    // ------------------------------------------------------------------
     function getMemosConfig() {
         return {
             apiUrl: GM_getValue('MEMOS_API_URL', ''),
@@ -55,11 +58,17 @@
     function onThemeChange(callback) {
         themeListeners.add(callback);
     }
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    const darkMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleThemeChange = (e) => {
         themeListeners.forEach(cb => {
             try { cb(e.matches); } catch (err) { /* 单个回调出错不应影响其他回调 */ }
         });
-    });
+    };
+    if (darkMediaQuery.addEventListener) {
+        darkMediaQuery.addEventListener('change', handleThemeChange);
+    } else if (darkMediaQuery.addListener) {
+        darkMediaQuery.addListener(handleThemeChange); // 兼容旧版 Safari (<14) 及旧版 Chrome
+    }
 
     // 注入样式
     GM_addStyle(`
@@ -487,7 +496,7 @@
     let currentLink = null;
 
     document.addEventListener('contextmenu', function (event) {
-        currentLink = event.target.closest('a');
+        currentLink = event.target.closest('a') || null;
     }, false);
 
     GM_registerMenuCommand('发送选中内容到 Memos', function () {
@@ -529,8 +538,14 @@
         }
     }
 
-    document.addEventListener('click', function () {
-        currentLink = null;
+    // 仅当点击目标恰好就是 currentLink 本身（例如部分浏览器/长按场景下右键会伴随触发一次
+    // 同目标的 click 事件）时才保留状态；点击其他任何位置（包括别的链接）都应清空，
+    // 避免残留的旧链接在后续操作中被误用
+    document.addEventListener('click', function (event) {
+        const clickedLink = event.target.closest('a');
+        if (clickedLink !== currentLink) {
+            currentLink = null;
+        }
     }, false);
 
     // 创建/激活配置模态框（DOM 复用单例模式）
@@ -760,30 +775,43 @@
         let isDragging = false;
         let hasMoved = false;
         let offsetX, offsetY;
+        let startX, startY;
         let buttonWidth = 36;
         let buttonHeight = 36;
+        const DRAG_THRESHOLD = 4; // px，小于该位移视为点击时的手抖，不判定为拖动
 
         function onMouseMove(e) {
-            if (isDragging) {
-                hasMoved = true;
-                const x = e.clientX - offsetX;
-                const y = e.clientY - offsetY;
-                const maxX = window.innerWidth - buttonWidth;
-                const maxY = window.innerHeight - buttonHeight;
+            if (!isDragging) return;
 
-                floatButton.style.left = Math.min(Math.max(0, x), maxX) + 'px';
-                floatButton.style.top = Math.min(Math.max(0, y), maxY) + 'px';
-                floatButton.style.right = 'auto';
-                floatButton.style.bottom = 'auto';
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+
+            // 未越过阈值前不标记为"已拖动"，也不移动按钮，避免手抖误吞点击/双击事件
+            if (!hasMoved && Math.hypot(dx, dy) < DRAG_THRESHOLD) {
+                return;
             }
+            hasMoved = true;
+
+            const x = e.clientX - offsetX;
+            const y = e.clientY - offsetY;
+            const maxX = window.innerWidth - buttonWidth;
+            const maxY = window.innerHeight - buttonHeight;
+
+            floatButton.style.left = Math.min(Math.max(0, x), maxX) + 'px';
+            floatButton.style.top = Math.min(Math.max(0, y), maxY) + 'px';
+            floatButton.style.right = 'auto';
+            floatButton.style.bottom = 'auto';
         }
 
         function onMouseUp() {
             if (isDragging) {
-                GM_setValue('MEMOS_BUTTON_POSITION', {
-                    left: parseInt(floatButton.style.left, 10) || 0,
-                    top: parseInt(floatButton.style.top, 10) || 0
-                });
+                // 只有真正发生了拖动位移，才写入新位置，避免每次单击都触发一次无意义的存储写入
+                if (hasMoved) {
+                    GM_setValue('MEMOS_BUTTON_POSITION', {
+                        left: parseInt(floatButton.style.left, 10) || 0,
+                        top: parseInt(floatButton.style.top, 10) || 0
+                    });
+                }
                 isDragging = false;
 
                 document.removeEventListener('mousemove', onMouseMove);
@@ -805,6 +833,8 @@
 
             offsetX = e.clientX - rect.left;
             offsetY = e.clientY - rect.top;
+            startX = e.clientX;
+            startY = e.clientY;
             e.preventDefault();
 
             document.addEventListener('mousemove', onMouseMove);
