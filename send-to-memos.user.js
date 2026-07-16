@@ -2,9 +2,9 @@
 // @name            发送到 Memos
 // @name:en         Send to Memos
 // @namespace       https://github.com/hu3rror/my-userscript
-// @version         3.0.0
-// @description     将选中的富文本（含列表、链接、代码、表格等）、链接或文本发送到 Memos，基于 Turndown 实现规范 Markdown 转换，支持防丢草稿、本地/公网部署智能识别与并发保护
-// @description:en  Send selected rich text to Memos with robust Markdown conversion via Turndown, draft saving, and concurrency protection
+// @version         3.1.0
+// @description     将选中的富文本（含列表、链接、代码、表格等）、链接或文本发送到 Memos，基于 Turndown 实现规范 Markdown 转换，按区块智能格式化（代码块/表格/标题/列表保持原样，纯文本套用引用块），支持防丢草稿、本地/公网部署智能识别与并发保护
+// @description:en  Send selected rich text to Memos with robust Markdown conversion via Turndown, block-aware formatting (code/table/heading/list stay raw, plain text quoted), draft saving, and concurrency protection
 // @author          Hu3rror
 // @match           *://*/*
 // @grant           GM_xmlhttpRequest
@@ -23,9 +23,7 @@
 (function () {
     'use strict';
 
-    // ------------------------------------------------------------------
-    // 配置读取：不缓存为顶层 const，每次都实时读库，避免"改配置不刷新页面就不生效"的问题
-    // ------------------------------------------------------------------
+    // 每次都实时读取存储，不做顶层缓存，避免"改了配置但不刷新页面就不生效"
     function getMemosConfig() {
         return {
             apiUrl: GM_getValue('MEMOS_API_URL', ''),
@@ -274,11 +272,8 @@
         return text.replace(/([\[\]])/g, '\\$1');
     }
 
-    // ------------------------------------------------------------------
-    // 基于 Turndown 的 HTML -> Markdown 转换（替代原来手写的递归解析器）
-    // 通过 try/catch 防御 @require 加载失败的情况，失败时降级为纯文本，
-    // 保证核心的"发送"功能不会因为 CDN 不可用而完全瘫痪
-    // ------------------------------------------------------------------
+    // 基于 Turndown 做 HTML -> Markdown 转换；
+    // @require 的 CDN 资源可能加载失败，用 try/catch 兜底降级为纯文本，避免发送功能完全瘫痪
     let turndownService = null;
     try {
         if (typeof TurndownService === 'undefined') {
@@ -340,7 +335,8 @@
         turndownService = null;
     }
 
-    // 检测选区是否位于 code 块内（降级模式下用于判断是否要走代码块格式）
+    // 检测选区是否位于 code 块内：仅在 Turndown 不可用的降级模式下使用，
+    // 正常情况下代码块的识别与转换完全交给 Turndown 的 fencedCodeBlockWithLang 规则
     function getSelectionCodeBlockInfo() {
         try {
             const sel = window.getSelection();
@@ -362,14 +358,17 @@
         return null;
     }
 
-    // 智能获取选区内的富文本并转换为 Markdown；Turndown 不可用时自动降级为纯文本
+    // 智能获取选区内的富文本并转换为 Markdown；
+    // Turndown 不可用时降级为纯文本，但仍尽量保留代码块的语言标注
     function getSelectedMarkdown() {
         try {
             const sel = window.getSelection();
             if (!sel || sel.rangeCount === 0) return '';
 
             if (!turndownService) {
-                return sel.toString().trim();
+                const text = sel.toString().trim();
+                const codeInfo = getSelectionCodeBlockInfo();
+                return codeInfo && codeInfo.isCode ? `\`\`\`${codeInfo.lang}\n${text}\n\`\`\`` : text;
             }
 
             const range = sel.getRangeAt(0);
@@ -397,17 +396,71 @@
         return { title: escapeMarkdownTitle(title), url, description: escapeMarkdownTitle(description) };
     }
 
-    // 将文本转换为 Markdown 引用块
+    // 将文本转换为 Markdown 引用块（仅用于"确认是纯文本段落"的场景，
+    // 结构化语法段落一律不经过这里，避免破坏代码块/表格的解析）
     function formatAsBlockquote(text) {
         if (!text) return '';
         return text.split('\n').map(line => `> ${line}`).join('\n');
     }
 
-    // ------------------------------------------------------------------
-    // API 地址安全检测：区分"公网 http"（风险高，需二次确认）和
-    // "本地/内网 http"（本地部署常见场景，风险低，不拦截）以及"格式非法"
-    // 用结构化的 level 字段代替字符串内容匹配，避免调用方误判
-    // ------------------------------------------------------------------
+    // 判断一个 Markdown 段落是否包含表格 / 标题 / 列表 / 已有引用块等结构化语法。
+    // 代码围栏不在此判断范围内，因为代码块已经在 formatMarkdownForMemos 中被单独摘出处理。
+    // 这类结构化段落一旦被套上 "> " 前缀，很容易在 Memos 的渲染器中失效
+    // （尤其是表格：解析器通常要求表格行顶格出现，不支持在引用块内嵌套解析）。
+    function hasStructuredMarkdown(text) {
+        if (!text) return false;
+        const patterns = [
+            /^\s*\|.*\|\s*$/m,        // 表格行（GFM pipe table）
+            /^\s*#{1,6}\s/m,          // ATX 标题
+            /^\s*([-*+]|\d+\.)\s/m,   // 无序/有序列表
+            /^\s*>/m                  // 已经是引用块，避免重复嵌套导致语义混乱
+        ];
+        return patterns.some((re) => re.test(text));
+    }
+
+    // 按区块智能格式化：
+    // 1) 先把围栏代码块整体摘出来，代码块内容原样保留（防止内部空行被误判为段落分隔符，
+    //    也防止代码内容被逐行加上 "> " 破坏语法高亮）；
+    // 2) 其余部分按空行切成段落，逐段判断——结构化语法（表格/标题/列表）原样保留，
+    //    普通正文才套用引用块样式；
+    // 这样一次摘录里"正文 + 代码块 + 表格"可以同时保持在 Memos 中可读、可复用。
+    function formatMarkdownForMemos(markdown) {
+        if (!markdown) return '';
+
+        const segments = [];
+        const codeBlockRegex = /```[\s\S]*?```/g;
+        let lastIndex = 0;
+        let match;
+        while ((match = codeBlockRegex.exec(markdown)) !== null) {
+            if (match.index > lastIndex) {
+                segments.push({ text: markdown.slice(lastIndex, match.index), isCode: false });
+            }
+            segments.push({ text: match[0], isCode: true });
+            lastIndex = codeBlockRegex.lastIndex;
+        }
+        if (lastIndex < markdown.length) {
+            segments.push({ text: markdown.slice(lastIndex), isCode: false });
+        }
+
+        const output = [];
+        segments.forEach(({ text, isCode }) => {
+            if (isCode) {
+                const trimmed = text.trim();
+                if (trimmed) output.push(trimmed);
+                return;
+            }
+            text.split(/\n{2,}/).forEach((para) => {
+                const trimmed = para.trim();
+                if (!trimmed) return;
+                output.push(hasStructuredMarkdown(trimmed) ? trimmed : formatAsBlockquote(trimmed));
+            });
+        });
+
+        return output.join('\n\n');
+    }
+
+    // 区分公网 http（有风险，需二次确认）、本地/内网 http（部署常见场景，不拦截）与格式非法三种情况，
+    // 用结构化的 level 字段代替字符串匹配，避免调用方判断出错
     function isPrivateOrLocalHost(hostname) {
         if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true;
         if (/\.local$/i.test(hostname)) return true;
@@ -422,12 +475,12 @@
         try {
             url = new URL(apiUrl);
         } catch (e) {
-            return { level: 'invalid', message: 'API URL 格式不合法，请检查后重试' };
+            return { level: 'invalid', message: '服务地址格式不正确，请检查后重试' };
         }
         if (url.protocol === 'http:' && !isPrivateOrLocalHost(url.hostname)) {
             return {
                 level: 'warn',
-                message: '您配置的 API 地址是公网 http（非 https），Token 存在被窃听风险，建议改用 https 或通过内网访问。'
+                message: '该地址是公网 http（非 https），Token 存在被截获的风险，建议改用 https。'
             };
         }
         return { level: 'ok' };
@@ -438,7 +491,7 @@
         const { apiUrl, apiToken } = getMemosConfig();
 
         if (!apiUrl || !apiToken) {
-            showNotification('请先配置 Memos API URL 和 Token', true);
+            showNotification('请先完成 Memos 配置', true);
             showConfigModal();
             return;
         }
@@ -456,40 +509,48 @@
         isSending = true;
         setFloatButtonState('loading');
 
-        GM_xmlhttpRequest({
-            method: 'POST',
-            url: apiUrl,
-            headers: {
-                'Authorization': `Bearer ${apiToken}`,
-                'Content-Type': 'application/json'
-            },
-            data: JSON.stringify({
-                content: content,
-                visibility: 'PRIVATE'
-            }),
-            timeout: 15000,
-            onload: function (response) {
-                isSending = false;
-                if (response.status === 200 || response.status === 201) {
-                    showNotification('成功发送到 Memos！');
-                    setFloatButtonState('success');
-                    if (onSuccessCallback) onSuccessCallback();
-                } else {
-                    showNotification(`发送到 Memos 失败。状态码: ${response.status}\n可能端点错误。`, true);
+        // try/catch 防御同步抛错的极端情况（例如参数异常）：
+        // 否则 onload/onerror/ontimeout 都不会触发，isSending 会永久卡死，导致后续无法再次发送
+        try {
+            GM_xmlhttpRequest({
+                method: 'POST',
+                url: apiUrl,
+                headers: {
+                    'Authorization': `Bearer ${apiToken}`,
+                    'Content-Type': 'application/json'
+                },
+                data: JSON.stringify({
+                    content: content,
+                    visibility: 'PRIVATE'
+                }),
+                timeout: 15000,
+                onload: function (response) {
+                    isSending = false;
+                    if (response.status === 200 || response.status === 201) {
+                        showNotification('已发送到 Memos');
+                        setFloatButtonState('success');
+                        if (onSuccessCallback) onSuccessCallback();
+                    } else {
+                        showNotification(`发送失败（状态码 ${response.status}），请检查服务地址是否正确`, true);
+                        setFloatButtonState('error');
+                    }
+                },
+                onerror: function (error) {
+                    isSending = false;
+                    showNotification('发送失败：' + error, true);
+                    setFloatButtonState('error');
+                },
+                ontimeout: function () {
+                    isSending = false;
+                    showNotification('发送超时，请检查网络或服务地址是否可达', true);
                     setFloatButtonState('error');
                 }
-            },
-            onerror: function (error) {
-                isSending = false;
-                showNotification('发送到 Memos 时出错: ' + error, true);
-                setFloatButtonState('error');
-            },
-            ontimeout: function () {
-                isSending = false;
-                showNotification('发送到 Memos 超时，请检查网络或服务地址', true);
-                setFloatButtonState('error');
-            }
-        });
+            });
+        } catch (e) {
+            isSending = false;
+            showNotification('发送失败：' + e.message, true);
+            setFloatButtonState('error');
+        }
     }
 
     // 存储当前右键点击的链接
@@ -507,27 +568,15 @@
         showConfigModal();
     });
 
-    // 处理普通发送动作
+    // 处理普通发送动作：格式化逻辑完全交给 formatMarkdownForMemos，
+    // 按区块智能决定哪些内容需要引用块包裹、哪些需要原样保留
     function handleSendAction() {
         const selectedMarkdown = getSelectedMarkdown();
         const meta = getPageMetadata();
 
         if (selectedMarkdown) {
-            const codeInfo = getSelectionCodeBlockInfo();
-            let content;
-
-            if (codeInfo && codeInfo.isCode && !selectedMarkdown.startsWith('```')) {
-                content = `#摘录 📂 **[${meta.title}](${meta.url})**\n\n\`\`\`${codeInfo.lang}\n${window.getSelection().toString().trim()}\n\`\`\``;
-            } else {
-                const isAlreadyCodeBlock = selectedMarkdown.startsWith('```');
-                if (isAlreadyCodeBlock) {
-                    content = `#摘录 📂 **[${meta.title}](${meta.url})**\n\n${selectedMarkdown}`;
-                } else {
-                    const quote = formatAsBlockquote(selectedMarkdown);
-                    content = `#摘录 📂 **[${meta.title}](${meta.url})**\n\n${quote}`;
-                }
-            }
-            sendToMemos(content);
+            const body = formatMarkdownForMemos(selectedMarkdown);
+            sendToMemos(`#摘录 📂 **[${meta.title}](${meta.url})**\n\n${body}`);
         } else if (currentLink && currentLink.href) {
             const linkText = escapeMarkdownTitle(currentLink.textContent.trim() || '无文本');
             const linkUrl = currentLink.href;
@@ -538,9 +587,8 @@
         }
     }
 
-    // 仅当点击目标恰好就是 currentLink 本身（例如部分浏览器/长按场景下右键会伴随触发一次
-    // 同目标的 click 事件）时才保留状态；点击其他任何位置（包括别的链接）都应清空，
-    // 避免残留的旧链接在后续操作中被误用
+    // 仅当点击目标就是 currentLink 本身时才保留（部分浏览器/长按场景下右键会伴随触发同目标的 click），
+    // 点击其他任何地方都清空，避免残留旧链接被误用
     document.addEventListener('click', function (event) {
         const clickedLink = event.target.closest('a');
         if (clickedLink !== currentLink) {
@@ -560,17 +608,17 @@
             modalContent.className = `memos-modal-content ${isDarkMode() ? 'dark-mode' : 'light-mode'}`;
 
             modalContent.innerHTML = `
-                <h2>配置 Memos API</h2>
+                <h2>配置 Memos</h2>
                 <div class="memos-form-group">
-                    <label for="memos-api-url">API URL:</label>
-                    <input type="text" id="memos-api-url" placeholder="例如：https://example.com/api/v1/memos">
-                    <small class="memos-hint">注意：保留 /api/v1/memos 路径；本地部署可使用 http://localhost 或内网 IP</small>
+                    <label for="memos-api-url">服务地址：</label>
+                    <input type="text" id="memos-api-url" placeholder="https://example.com/api/v1/memos">
+                    <small class="memos-hint">需保留 /api/v1/memos 路径；本地部署可用 http://localhost 或内网 IP</small>
                 </div>
                 <div class="memos-form-group">
-                    <label for="memos-api-token">API Token:</label>
+                    <label for="memos-api-token">Access Token：</label>
                     <div class="memos-input-wrap">
-                        <input type="password" id="memos-api-token" placeholder="输入您的 API Token">
-                        <button type="button" class="memos-token-toggle" id="memos-token-toggle" title="显示/隐藏 Token">👁</button>
+                        <input type="password" id="memos-api-token" placeholder="粘贴您的 Access Token">
+                        <button type="button" class="memos-token-toggle" id="memos-token-toggle" title="显示/隐藏">👁</button>
                     </div>
                 </div>
                 <div class="memos-buttons">
@@ -603,7 +651,7 @@
                 const apiToken = apiTokenInput.value.trim();
 
                 if (!apiUrl || !apiToken) {
-                    showNotification('API URL 和 Token 不能为空', true);
+                    showNotification('服务地址和 Token 不能为空', true);
                     return;
                 }
 
@@ -660,7 +708,7 @@
     // 创建/激活快捷记录模态框（DOM 复用单例模式 + 草稿自动保存）
     function showQuickInputModal() {
         if (!isMemosConfigured()) {
-            showNotification('请先配置 Memos API URL 和 Token', true);
+            showNotification('请先完成 Memos 配置', true);
             showConfigModal();
             return;
         }
@@ -677,7 +725,7 @@
             modalContent.innerHTML = `
                 <h2>新建备忘</h2>
                 <div class="memos-form-group">
-                    <textarea id="memos-quick-content" rows="5" placeholder="写点什么...（发送后将自动附带当前页面来源）"></textarea>
+                    <textarea id="memos-quick-content" rows="5" placeholder="写点什么...（会自动附带来源页面）"></textarea>
                 </div>
                 <div class="memos-buttons">
                     <button class="memos-button cancel">取消</button>
@@ -759,7 +807,7 @@
         const floatButton = document.createElement('div');
         floatButton.id = 'memos-float-button';
         floatButton.textContent = 'M';
-        floatButton.title = '单击发送/双击纯书签收藏';
+        floatButton.title = '单击：发送选中内容　双击：收藏本页';
         document.body.appendChild(floatButton);
 
         cachedFloatButton = floatButton;
