@@ -2,9 +2,9 @@
 // @name            发送到 Memos
 // @name:en         Send to Memos
 // @namespace       https://github.com/hu3rror/my-userscript
-// @version         2.7.1
-// @description     将选中的富文本（含列表、链接、代码等）、链接或文本发送到 Memos，支持智能代码高亮、防丢草稿与极致性能复用设计
-// @description:en  Send selected rich text (including lists, links, code, etc.), links, or text to Memos, supports smart code highlighting, draft saving, and optimized UI recycling
+// @version         3.0.0
+// @description     将选中的富文本（含列表、链接、代码、表格等）、链接或文本发送到 Memos，基于 Turndown 实现规范 Markdown 转换，支持防丢草稿、本地/公网部署智能识别与并发保护
+// @description:en  Send selected rich text to Memos with robust Markdown conversion via Turndown, draft saving, and concurrency protection
 // @author          Hu3rror
 // @match           *://*/*
 // @grant           GM_xmlhttpRequest
@@ -12,6 +12,9 @@
 // @grant           GM_getValue
 // @grant           GM_setValue
 // @grant           GM_addStyle
+// @connect         *
+// @require         https://cdn.jsdelivr.net/npm/turndown@7.2.4/dist/turndown.js
+// @require         https://cdn.jsdelivr.net/npm/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js
 // @license         MIT
 // @downloadURL     https://raw.githubusercontent.com/hu3rror/my-userscript/main/send-to-memos.user.js
 // @updateURL       https://raw.githubusercontent.com/hu3rror/my-userscript/main/send-to-memos.user.js
@@ -20,10 +23,16 @@
 (function () {
     'use strict';
 
-    // 获取保存的配置或使用默认值
-    const MEMOS_API_URL = GM_getValue('MEMOS_API_URL', '');
-    const API_TOKEN = GM_getValue('API_TOKEN', '');
-    let isConfigured = !!(MEMOS_API_URL && API_TOKEN);
+    function getMemosConfig() {
+        return {
+            apiUrl: GM_getValue('MEMOS_API_URL', ''),
+            apiToken: GM_getValue('API_TOKEN', '')
+        };
+    }
+    function isMemosConfigured() {
+        const { apiUrl, apiToken } = getMemosConfig();
+        return !!(apiUrl && apiToken);
+    }
 
     // 缓存全局 DOM 引用与临时事件句柄，降低内存与性能开销
     let cachedFloatButton = null;
@@ -32,12 +41,27 @@
     let handleConfigEsc = null;
     let handleQuickInputEsc = null;
 
+    // 并发保护：防止用户连续点击导致重复发送
+    let isSending = false;
+
     // 检测系统颜色主题
     function isDarkMode() {
         return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
 
-    // 注入样式（使用局部作用域 CSS 变量重构，优雅精简，避免污染）
+    // 统一的深色模式订阅：所有需要响应主题切换的元素在这里注册回调，
+    // 避免在多个函数里各自创建 matchMedia 监听器
+    const themeListeners = new Set();
+    function onThemeChange(callback) {
+        themeListeners.add(callback);
+    }
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+        themeListeners.forEach(cb => {
+            try { cb(e.matches); } catch (err) { /* 单个回调出错不应影响其他回调 */ }
+        });
+    });
+
+    // 注入样式
     GM_addStyle(`
         #memos-float-button {
             position: fixed;
@@ -80,7 +104,6 @@
             z-index: 10000;
         }
         .memos-modal-content {
-            /* 局部作用域的 CSS 变量，便于维护且杜绝全局样式干扰 */
             --memos-bg: #ffffff;
             --memos-text: #333333;
             --memos-border: #dddddd;
@@ -126,6 +149,30 @@
             background-color: var(--memos-input-bg);
             color: var(--memos-text);
             transition: all 0.3s ease;
+        }
+        .memos-input-wrap {
+            position: relative;
+        }
+        .memos-input-wrap input {
+            padding-right: 34px;
+        }
+        .memos-token-toggle {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 2px 4px;
+            color: var(--memos-text);
+        }
+        .memos-hint {
+            color: #888;
+            display: block;
+            margin-top: 5px;
+            font-size: 12px;
         }
         .memos-button {
             padding: 8px 16px;
@@ -212,18 +259,87 @@
         return window.getSelection().toString().trim();
     }
 
-    // 安全检测选区是否位于 code 块内
+    // 智能转义可能破坏 Markdown 链接格式的字符（用于页面元数据标题，非选区正文）
+    function escapeMarkdownTitle(text) {
+        if (!text) return '';
+        return text.replace(/([\[\]])/g, '\\$1');
+    }
+
+    // ------------------------------------------------------------------
+    // 基于 Turndown 的 HTML -> Markdown 转换（替代原来手写的递归解析器）
+    // 通过 try/catch 防御 @require 加载失败的情况，失败时降级为纯文本，
+    // 保证核心的"发送"功能不会因为 CDN 不可用而完全瘫痪
+    // ------------------------------------------------------------------
+    let turndownService = null;
+    try {
+        if (typeof TurndownService === 'undefined') {
+            throw new Error('TurndownService 未加载（可能是 @require 的 CDN 资源被网络环境屏蔽）');
+        }
+        turndownService = new TurndownService({
+            headingStyle: 'atx',
+            codeBlockStyle: 'fenced',
+            bulletListMarker: '-'
+        });
+        if (typeof turndownPluginGfm !== 'undefined' && turndownPluginGfm.gfm) {
+            turndownService.use(turndownPluginGfm.gfm);
+        }
+
+        // 安全过滤：拦截可能携带恶意执行逻辑或产生不必要样式的活性标签
+        turndownService.remove(['script', 'style', 'noscript', 'iframe', 'object', 'embed']);
+
+        // 代码块语言识别：class 可能标注在 <pre> 或 <code> 任意一方
+        turndownService.addRule('fencedCodeBlockWithLang', {
+            filter: (node) => node.nodeName === 'PRE' && node.firstChild && node.firstChild.nodeName === 'CODE',
+            replacement: (content, node) => {
+                const codeEl = node.firstChild;
+                const langSource = codeEl.className || node.className || '';
+                const langMatch = langSource.match(/(?:lang|language)-([a-zA-Z0-9+#-]+)/);
+                const lang = langMatch ? langMatch[1] : '';
+                return `\n\n\`\`\`${lang}\n${codeEl.textContent.trim()}\n\`\`\`\n\n`;
+            }
+        });
+
+        // 链接/图片相对路径转绝对路径，防止剪贴后失效
+        turndownService.addRule('absoluteLinks', {
+            filter: 'a',
+            replacement: (content, node) => {
+                const href = node.getAttribute('href');
+                const text = content.trim();
+                if (!href || !text) return text;
+                try {
+                    return `[${text}](${new URL(href, document.baseURI).href})`;
+                } catch (e) {
+                    return `[${text}](${href})`;
+                }
+            }
+        });
+        turndownService.addRule('absoluteImages', {
+            filter: 'img',
+            replacement: (content, node) => {
+                const src = node.getAttribute('src');
+                const alt = node.getAttribute('alt') || 'image';
+                if (!src) return '';
+                try {
+                    return `![${alt}](${new URL(src, document.baseURI).href})`;
+                } catch (e) {
+                    return `![${alt}](${src})`;
+                }
+            }
+        });
+    } catch (e) {
+        console.error('[发送到 Memos] Turndown 初始化失败，将降级为纯文本模式:', e);
+        turndownService = null;
+    }
+
+    // 检测选区是否位于 code 块内（降级模式下用于判断是否要走代码块格式）
     function getSelectionCodeBlockInfo() {
         try {
             const sel = window.getSelection();
             if (!sel || sel.rangeCount === 0) return null;
-
             const range = sel.getRangeAt(0);
             const container = range.commonAncestorContainer;
-
             const element = container.nodeType === 1 ? container : container.parentElement;
             if (!element) return null;
-
             const codeElement = element.closest('pre, code');
             if (codeElement) {
                 const className = codeElement.className || '';
@@ -237,141 +353,26 @@
         return null;
     }
 
-    // 智能转义可能破坏 Markdown 链接格式的字符（如 [] 符号对）
-    function escapeMarkdownTitle(text) {
-        if (!text) return '';
-        return text.replace(/([\[\]])/g, '\\$1');
-    }
-
-    // 原生、轻量 HTML-to-Markdown 递归转换解析器
-    function htmlToMarkdown(node, listType = null, listIndex = 1, depth = 0) {
-        if (!node) return '';
-
-        // 处理纯文本节点
-        if (node.nodeType === 3) {
-            return node.nodeValue;
-        }
-
-        // 处理元素节点
-        if (node.nodeType === 1) {
-            const tagName = node.tagName.toLowerCase();
-
-            // 安全过滤：拦截可能携带恶意执行逻辑或产生不必要样式的活性标签
-            if (['script', 'style', 'noscript', 'iframe', 'object', 'embed'].includes(tagName)) {
-                return '';
-            }
-
-            let childrenMarkdown = '';
-            let nextListType = listType;
-            if (tagName === 'ul') nextListType = 'ul';
-            if (tagName === 'ol') nextListType = 'ol';
-
-            let liCounter = 1;
-            for (let i = 0; i < node.childNodes.length; i++) {
-                const child = node.childNodes[i];
-
-                // 忽略列表下无意义的空白文本节点，切断列表中多余空行的产生源头
-                if ((tagName === 'ul' || tagName === 'ol') && child.nodeType === 3 && !child.nodeValue.trim()) {
-                    continue;
-                }
-
-                if (child.nodeType === 1 && child.tagName.toLowerCase() === 'li') {
-                    childrenMarkdown += htmlToMarkdown(child, nextListType, liCounter++, depth + 1);
-                } else {
-                    childrenMarkdown += htmlToMarkdown(child, nextListType, 1, depth);
-                }
-            }
-
-            switch (tagName) {
-                case 'strong':
-                case 'b':
-                    return childrenMarkdown.trim() ? `**${childrenMarkdown.trim()}**` : '';
-                case 'em':
-                case 'i':
-                    return childrenMarkdown.trim() ? `*${childrenMarkdown.trim()}*` : '';
-                case 'a':
-                    const href = node.getAttribute('href');
-                    const text = childrenMarkdown.trim();
-                    if (href && text) {
-                        try {
-                            // 自动将相对路径转换为绝对路径链接，防止剪贴后失效
-                            return `[${escapeMarkdownTitle(text)}](${new URL(href, document.baseURI).href})`;
-                        } catch (e) {
-                            return `[${escapeMarkdownTitle(text)}](${href})`;
-                        }
-                    }
-                    return text;
-                case 'code':
-                    const isBlock = node.parentElement && node.parentElement.tagName.toLowerCase() === 'pre';
-                    return isBlock ? childrenMarkdown : ` \`${childrenMarkdown.trim()}\` `;
-                case 'pre':
-                    const codeInfo = getSelectionCodeBlockInfo();
-                    const lang = codeInfo ? codeInfo.lang : '';
-                    return `\n\`\`\`${lang}\n${node.textContent.trim()}\n\`\`\`\n`;
-                case 'li':
-                    const indent = '  '.repeat(Math.max(0, depth - 1));
-                    const marker = listType === 'ol' ? `${listIndex}. ` : '- ';
-                    return `\n${indent}${marker}${childrenMarkdown.trim()}`;
-                case 'ul':
-                case 'ol':
-                    return `${childrenMarkdown}\n`;
-                case 'img':
-                    const src = node.getAttribute('src');
-                    const alt = node.getAttribute('alt') || 'image';
-                    if (src) {
-                        try {
-                            return `![${escapeMarkdownTitle(alt)}](${new URL(src, document.baseURI).href})`;
-                        } catch (e) {
-                            return `![${escapeMarkdownTitle(alt)}](${src})`;
-                        }
-                    }
-                    return '';
-                case 'td':
-                case 'th':
-                    return ` ${childrenMarkdown.trim()} |`;
-                case 'tr':
-                    return `\n| ${childrenMarkdown.trim()}`;
-                case 'p':
-                case 'div':
-                case 'h1':
-                case 'h2':
-                case 'h3':
-                case 'h4':
-                case 'h5':
-                case 'h6':
-                    return `\n${childrenMarkdown.trim()}\n`;
-                case 'br':
-                    return '\n';
-                default:
-                    return childrenMarkdown;
-            }
-        }
-        return '';
-    }
-
-    // 智能获取选区内的富文本并转换为高质量 Markdown 格式
+    // 智能获取选区内的富文本并转换为 Markdown；Turndown 不可用时自动降级为纯文本
     function getSelectedMarkdown() {
         try {
             const sel = window.getSelection();
             if (!sel || sel.rangeCount === 0) return '';
 
+            if (!turndownService) {
+                return sel.toString().trim();
+            }
+
             const range = sel.getRangeAt(0);
             const container = document.createElement('div');
             container.appendChild(range.cloneContents());
 
-            let markdown = htmlToMarkdown(container).trim();
-
-            // 智能消除多层级列表项之间残留的繁杂空行
-            markdown = markdown.replace(/(^(\s*)-\s+.*)\n\s*\n(?=\s*-\s+)/gm, '$1\n');
-            markdown = markdown.replace(/(^(\s*)\d+\.\s+.*)\n\s*\n(?=\s*\d+\.\s+)/gm, '$1\n');
-
-            // 去除连续的多段空行
+            let markdown = turndownService.turndown(container).trim();
             markdown = markdown.replace(/\n{3,}/g, '\n\n');
-
             return markdown;
         } catch (e) {
-            console.error('[Memos] 转换选区至 Markdown 时出错:', e);
-            return window.getSelection().toString().trim(); // 出错退回到纯文本
+            console.error('[发送到 Memos] 转换选区至 Markdown 时出错:', e);
+            return window.getSelection().toString().trim();
         }
     }
 
@@ -393,32 +394,73 @@
         return text.split('\n').map(line => `> ${line}`).join('\n');
     }
 
-    // 发送内容到 Memos 的基础函数（支持成功回调）
+    // ------------------------------------------------------------------
+    // API 地址安全检测：区分"公网 http"（风险高，需二次确认）和
+    // "本地/内网 http"（本地部署常见场景，风险低，不拦截）以及"格式非法"
+    // 用结构化的 level 字段代替字符串内容匹配，避免调用方误判
+    // ------------------------------------------------------------------
+    function isPrivateOrLocalHost(hostname) {
+        if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true;
+        if (/\.local$/i.test(hostname)) return true;
+        if (/^10\./.test(hostname)) return true;
+        if (/^192\.168\./.test(hostname)) return true;
+        if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)) return true;
+        return false;
+    }
+
+    function checkApiUrlSecurity(apiUrl) {
+        let url;
+        try {
+            url = new URL(apiUrl);
+        } catch (e) {
+            return { level: 'invalid', message: 'API URL 格式不合法，请检查后重试' };
+        }
+        if (url.protocol === 'http:' && !isPrivateOrLocalHost(url.hostname)) {
+            return {
+                level: 'warn',
+                message: '您配置的 API 地址是公网 http（非 https），Token 存在被窃听风险，建议改用 https 或通过内网访问。'
+            };
+        }
+        return { level: 'ok' };
+    }
+
+    // 发送内容到 Memos 的基础函数（支持成功回调 + 并发保护 + 超时保护）
     function sendToMemos(content, onSuccessCallback) {
-        if (!isConfigured) {
+        const { apiUrl, apiToken } = getMemosConfig();
+
+        if (!apiUrl || !apiToken) {
             showNotification('请先配置 Memos API URL 和 Token', true);
             showConfigModal();
             return;
         }
 
-        if (MEMOS_API_URL.startsWith('http://')) {
-            console.warn('[发送到 Memos] 您当前使用的 API URL 为非安全的 http 链接，建议升级至 https 保护 Token 安全。');
+        if (isSending) {
+            showNotification('上一条正在发送中，请稍候', true);
+            return;
         }
 
+        const check = checkApiUrlSecurity(apiUrl);
+        if (check.level === 'warn') {
+            console.warn('[发送到 Memos] ' + check.message);
+        }
+
+        isSending = true;
         setFloatButtonState('loading');
 
         GM_xmlhttpRequest({
             method: 'POST',
-            url: MEMOS_API_URL,
+            url: apiUrl,
             headers: {
-                'Authorization': `Bearer ${API_TOKEN}`,
+                'Authorization': `Bearer ${apiToken}`,
                 'Content-Type': 'application/json'
             },
             data: JSON.stringify({
                 content: content,
                 visibility: 'PRIVATE'
             }),
+            timeout: 15000,
             onload: function (response) {
+                isSending = false;
                 if (response.status === 200 || response.status === 201) {
                     showNotification('成功发送到 Memos！');
                     setFloatButtonState('success');
@@ -429,7 +471,13 @@
                 }
             },
             onerror: function (error) {
+                isSending = false;
                 showNotification('发送到 Memos 时出错: ' + error, true);
+                setFloatButtonState('error');
+            },
+            ontimeout: function () {
+                isSending = false;
+                showNotification('发送到 Memos 超时，请检查网络或服务地址', true);
                 setFloatButtonState('error');
             }
         });
@@ -438,12 +486,10 @@
     // 存储当前右键点击的链接
     let currentLink = null;
 
-    // 监听右键点击事件，捕获链接
     document.addEventListener('contextmenu', function (event) {
         currentLink = event.target.closest('a');
     }, false);
 
-    // 注册菜单命令
     GM_registerMenuCommand('发送选中内容到 Memos', function () {
         handleSendAction();
     });
@@ -452,7 +498,7 @@
         showConfigModal();
     });
 
-    // 处理普通发送动作（智能富文本检测与 Markdown 排版适配）
+    // 处理普通发送动作
     function handleSendAction() {
         const selectedMarkdown = getSelectedMarkdown();
         const meta = getPageMetadata();
@@ -461,7 +507,6 @@
             const codeInfo = getSelectionCodeBlockInfo();
             let content;
 
-            // 如果全选了代码段，或者富文本转换已经正确将其封装为围栏代码块
             if (codeInfo && codeInfo.isCode && !selectedMarkdown.startsWith('```')) {
                 content = `#摘录 📂 **[${meta.title}](${meta.url})**\n\n\`\`\`${codeInfo.lang}\n${window.getSelection().toString().trim()}\n\`\`\``;
             } else {
@@ -475,7 +520,6 @@
             }
             sendToMemos(content);
         } else if (currentLink && currentLink.href) {
-            // [右键网页链接书签]
             const linkText = escapeMarkdownTitle(currentLink.textContent.trim() || '无文本');
             const linkUrl = currentLink.href;
             const content = `#书签 🔗 **[${linkText}](${linkUrl})**\n\n---\n**来源**：[${meta.title}](${meta.url})`;
@@ -485,12 +529,11 @@
         }
     }
 
-    // 清理 currentLink
     document.addEventListener('click', function () {
         currentLink = null;
     }, false);
 
-    // 创建/激活配置模态框（极致性能：DOM复用单例模式设计）
+    // 创建/激活配置模态框（DOM 复用单例模式）
     function showConfigModal() {
         if (!configModal) {
             configModal = document.createElement('div');
@@ -506,11 +549,14 @@
                 <div class="memos-form-group">
                     <label for="memos-api-url">API URL:</label>
                     <input type="text" id="memos-api-url" placeholder="例如：https://example.com/api/v1/memos">
-                    <small style="color:#666;display:block;margin-top:5px;">注意：保留 /api/v1/memos 路径</small>
+                    <small class="memos-hint">注意：保留 /api/v1/memos 路径；本地部署可使用 http://localhost 或内网 IP</small>
                 </div>
                 <div class="memos-form-group">
                     <label for="memos-api-token">API Token:</label>
-                    <input type="password" id="memos-api-token" placeholder="输入您的 API Token">
+                    <div class="memos-input-wrap">
+                        <input type="password" id="memos-api-token" placeholder="输入您的 API Token">
+                        <button type="button" class="memos-token-toggle" id="memos-token-toggle" title="显示/隐藏 Token">👁</button>
+                    </div>
                 </div>
                 <div class="memos-buttons">
                     <button class="memos-button cancel">取消</button>
@@ -525,10 +571,14 @@
             const saveButton = modalContent.querySelector('.memos-button.save');
             const apiUrlInput = modalContent.querySelector('#memos-api-url');
             const apiTokenInput = modalContent.querySelector('#memos-api-token');
+            const tokenToggle = modalContent.querySelector('#memos-token-toggle');
 
-            const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
-            colorSchemeQuery.addEventListener('change', (e) => {
-                modalContent.className = `memos-modal-content ${e.matches ? 'dark-mode' : 'light-mode'}`;
+            tokenToggle.addEventListener('click', function () {
+                apiTokenInput.type = apiTokenInput.type === 'password' ? 'text' : 'password';
+            });
+
+            onThemeChange((isDark) => {
+                modalContent.className = `memos-modal-content ${isDark ? 'dark-mode' : 'light-mode'}`;
             });
 
             cancelButton.addEventListener('click', closeConfigModal);
@@ -542,9 +592,17 @@
                     return;
                 }
 
+                const check = checkApiUrlSecurity(apiUrl);
+                if (check.level === 'invalid') {
+                    showNotification(check.message, true);
+                    return;
+                }
+                if (check.level === 'warn') {
+                    if (!confirm(check.message + '\n\n仍要保存吗？')) return;
+                }
+
                 GM_setValue('MEMOS_API_URL', apiUrl);
                 GM_setValue('API_TOKEN', apiToken);
-                isConfigured = true;
 
                 showNotification('配置已保存');
                 closeConfigModal();
@@ -555,10 +613,11 @@
         const modalContent = configModal.querySelector('.memos-modal-content');
         modalContent.className = `memos-modal-content ${isDarkMode() ? 'dark-mode' : 'light-mode'}`;
 
+        const { apiUrl, apiToken } = getMemosConfig();
         const apiUrlInput = configModal.querySelector('#memos-api-url');
         const apiTokenInput = configModal.querySelector('#memos-api-token');
-        if (apiUrlInput) apiUrlInput.value = GM_getValue('MEMOS_API_URL', '');
-        if (apiTokenInput) apiTokenInput.value = GM_getValue('API_TOKEN', '');
+        if (apiUrlInput) apiUrlInput.value = apiUrl;
+        if (apiTokenInput) { apiTokenInput.value = apiToken; apiTokenInput.type = 'password'; }
 
         configModal.style.display = 'flex';
 
@@ -583,15 +642,14 @@
         }
     }
 
-    // 创建/激活快捷记录模态框（极致性能：DOM复用单例模式设计 + 文字精炼优化）
+    // 创建/激活快捷记录模态框（DOM 复用单例模式 + 草稿自动保存）
     function showQuickInputModal() {
-        if (!isConfigured) {
+        if (!isMemosConfigured()) {
             showNotification('请先配置 Memos API URL 和 Token', true);
             showConfigModal();
             return;
         }
 
-        // 首次打开时：创建静态 DOM 
         if (!quickInputModal) {
             quickInputModal = document.createElement('div');
             quickInputModal.id = 'memos-quick-input-modal';
@@ -619,9 +677,8 @@
             const sendButton = modalContent.querySelector('.memos-button.save');
             const textarea = modalContent.querySelector('#memos-quick-content');
 
-            const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
-            colorSchemeQuery.addEventListener('change', (e) => {
-                modalContent.className = `memos-modal-content ${e.matches ? 'dark-mode' : 'light-mode'}`;
+            onThemeChange((isDark) => {
+                modalContent.className = `memos-modal-content ${isDark ? 'dark-mode' : 'light-mode'}`;
             });
 
             textarea.addEventListener('input', function () {
@@ -703,7 +760,6 @@
         let isDragging = false;
         let hasMoved = false;
         let offsetX, offsetY;
-
         let buttonWidth = 36;
         let buttonHeight = 36;
 
@@ -777,21 +833,14 @@
             }
         });
 
-        const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
-        const updateButtonStyle = (e) => {
-            if (e.matches) {
-                floatButton.classList.add('dark-mode');
-            } else {
-                floatButton.classList.remove('dark-mode');
-            }
-        };
-
-        updateButtonStyle(colorSchemeQuery);
-        colorSchemeQuery.addEventListener('change', updateButtonStyle);
+        onThemeChange((isDark) => {
+            floatButton.classList.toggle('dark-mode', isDark);
+        });
+        floatButton.classList.toggle('dark-mode', isDarkMode());
     }
 
     function updateFloatButton() {
-        if (isConfigured) {
+        if (isMemosConfigured()) {
             createFloatButton();
             if (cachedFloatButton) {
                 cachedFloatButton.style.display = 'flex';
@@ -805,7 +854,7 @@
     }
 
     document.addEventListener('mouseup', function () {
-        if (!isConfigured || !cachedFloatButton) return;
+        if (!isMemosConfigured() || !cachedFloatButton) return;
 
         const selectedText = getSelectedText();
         if (selectedText) {
