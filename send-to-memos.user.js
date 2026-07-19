@@ -2,7 +2,7 @@
 // @name            发送到 Memos
 // @name:en         Send to Memos
 // @namespace       https://github.com/hu3rror/my-userscript
-// @version         3.1.0
+// @version         3.1.1
 // @description     将选中的富文本（含列表、链接、代码、表格等）、链接或文本发送到 Memos，基于 Turndown 实现规范 Markdown 转换，按区块智能格式化（代码块/表格/标题/列表保持原样，纯文本套用引用块），支持防丢草稿、本地/公网部署智能识别与并发保护
 // @description:en  Send selected rich text to Memos with robust Markdown conversion via Turndown, block-aware formatting (code/table/heading/list stay raw, plain text quoted), draft saving, and concurrency protection
 // @author          Hu3rror
@@ -20,6 +20,9 @@
 // @updateURL       https://raw.githubusercontent.com/hu3rror/my-userscript/main/send-to-memos.user.js
 // @homepageURL     https://github.com/hu3rror/my-userscript
 // ==/UserScript==
+
+/* global TurndownService, turndownPluginGfm */
+
 (function () {
     'use strict';
 
@@ -410,10 +413,10 @@
     function hasStructuredMarkdown(text) {
         if (!text) return false;
         const patterns = [
-            /^\s*\|.*\|\s*$/m,        // 表格行（GFM pipe table）
-            /^\s*#{1,6}\s/m,          // ATX 标题
-            /^\s*([-*+]|\d+\.)\s/m,   // 无序/有序列表
-            /^\s*>/m                  // 已经是引用块，避免重复嵌套导致语义混乱
+            /^\s*\|.*\|\s*$/m,
+            /^\s*#{1,6}\s/m,
+            /^\s*([-*+]|\d+\.)\s/m,
+            /^\s*>/m
         ];
         return patterns.some((re) => re.test(text));
     }
