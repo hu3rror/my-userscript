@@ -31,28 +31,40 @@
 
     // 获取当前页面的 GitHub 仓库 Owner 和 Repo
     function getRepoDetails() {
-        const path = window.location.pathname;
-        const segments = path.split('/').filter(Boolean);
+        const metaNwo = document
+            .querySelector('meta[name="octolytics-dimension-repository_nwo"]')
+            ?.getAttribute('content')
+            ?.trim();
 
-        // 仓库路径至少需要有 [owner, repo] 两个部分
-        if (segments.length < 2) return null;
-
-        const [owner, repo] = segments;
-
-        // 过滤掉 GitHub 的顶级保留非仓库页面
-        const blacklist = new Set([
-            'settings', 'notifications', 'search', 'explore', 'trending',
-            'pulls', 'issues', 'marketplace', 'organizations', 'sponsors',
-            'features', 'customer-stories', 'readme', 'about', 'enterprise',
-            'pricing', 'contact', 'git-lfs', 'personal-files', 'topics',
-            'collections', 'events', 'community', 'gists'
-        ]);
-
-        if (blacklist.has(owner.toLowerCase())) {
-            return null;
+        if (metaNwo && /^[^/]+\/[^/]+$/.test(metaNwo)) {
+            const [owner, repo] = metaNwo.split('/');
+            return { owner, repo };
         }
 
-        return { owner, repo };
+        // 方法2：回退到仓库标题链接作为备用识别方式（兼容极少数无 meta 标签的页面）
+        const repoLink = document.querySelector(
+            '[data-testid="repo-name-link"]'
+        );
+
+        if (repoLink instanceof HTMLAnchorElement) {
+            const pathname = new URL(
+                repoLink.href,
+                location.origin
+            ).pathname;
+
+            const match = pathname.match(
+                /^\/([^/]+)\/([^/]+)\/?$/
+            );
+
+            if (match) {
+                return {
+                    owner: decodeURIComponent(match[1]),
+                    repo: decodeURIComponent(match[2])
+                };
+            }
+        }
+
+        return null;
     }
 
     // 创建 DeepWiki 的 SVG 元素
