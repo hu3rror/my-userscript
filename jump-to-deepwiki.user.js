@@ -140,23 +140,67 @@
     }
 
     function CreateUI(repoDetails) {
-        const pageheadActions = document.querySelector('ul.pagehead-actions');
+        const pageheadActions = document.querySelector('ul[data-testid="repo-header-actions"]')
+            || document.querySelector('ul.pagehead-actions');
         if (!pageheadActions) return;
 
         const deepwikiUrl = `https://deepwiki.com/${repoDetails.owner}/${repoDetails.repo}`;
         const zreadUrl = `https://zread.ai/${repoDetails.owner}/${repoDetails.repo}`;
 
-        // 顺序说明：先后注入 zread，再注入 DeepWiki。
-        // 由于采用的是 insertBefore 头部插入法，后插入的会排在更左边。
-        // 最终界面显示顺序：[DeepWiki] [zread.ai] [GitHub 默认的 Watch/Fork/Star...]
         createOrUpdateBtn(pageheadActions, 'zread', zreadUrl, 'zread.ai', createZreadSvg);
         createOrUpdateBtn(pageheadActions, 'deepwiki', deepwikiUrl, 'DeepWiki', createDeepWikiSvg);
     }
 
+    function createMobileBtn(container, id, url, textContent, svgCreator) {
+        const className = `js-jump-to-${id}-anchor`;
+        // 检查是否已存在该按钮（避免重复插入）
+        let existingAnchor = container.querySelector(`.${className}`);
+        if (existingAnchor) {
+            // 如果链接变化（比如切换分支），更新 href
+            if (existingAnchor.href !== url) {
+                existingAnchor.href = url;
+            }
+            return;
+        }
+
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        anchor.classList.add('btn', 'btn-sm', className);
+        anchor.setAttribute('data-view-component', 'true');
+
+        const svg = svgCreator();
+        svg.classList.add('octicon', 'mr-2', 'v-align-text-bottom', 'd-inline-block');
+
+        const textSpan = document.createElement('span');
+        textSpan.classList.add('d-inline');
+        textSpan.setAttribute('data-view-component', 'true');
+        textSpan.textContent = textContent;
+
+        anchor.appendChild(svg);
+        anchor.appendChild(textSpan);
+
+        container.prepend(anchor);
+    }
+
+    function CreateMobileUI(repoDetails) {
+        const mobileActions = document.querySelector('[data-testid="responsive-social-buttons"]');
+        if (!mobileActions) return;
+
+        const deepwikiUrl = `https://deepwiki.com/${repoDetails.owner}/${repoDetails.repo}`;
+        const zreadUrl = `https://zread.ai/${repoDetails.owner}/${repoDetails.repo}`;
+
+        createMobileBtn(mobileActions, 'zread', zreadUrl, 'zread.ai', createZreadSvg);
+        createMobileBtn(mobileActions, 'deepwiki', deepwikiUrl, 'DeepWiki', createDeepWikiSvg);
+    }
+
+    // 在 checkAndCreateUI 中同时调用
     function checkAndCreateUI() {
         const repoDetails = getRepoDetails();
         if (repoDetails) {
             CreateUI(repoDetails);
+            CreateMobileUI(repoDetails);
         }
     }
 
