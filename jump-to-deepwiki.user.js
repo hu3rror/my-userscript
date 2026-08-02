@@ -216,9 +216,15 @@
         }
     }
 
-    // 1. 首次冷启动（进入页面时运行）
-    checkAndCreateUI();
+    if (document.readyState === 'complete') {
+        requestAnimationFrame(checkAndCreateUI);
+    } else {
+        window.addEventListener('load', () => {
+            requestAnimationFrame(checkAndCreateUI);
+        });
+    }
 
-    // 2. 监听 GitHub 的原生单页路由加载完毕事件 (Turbo Load)
-    document.addEventListener('turbo:load', checkAndCreateUI);
+    document.addEventListener('turbo:load', () => {
+        requestAnimationFrame(checkAndCreateUI);
+    });
 })();
