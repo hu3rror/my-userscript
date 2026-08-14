@@ -14,4 +14,4 @@ GitHub — issues 用 `gh` CLI 管理。见 `docs/agents/issue-tracker.md`。
 
 ### Domain docs
 
-单上下文：根目录 `CONTEXT.md` + `docs/adr/`。见 `docs/agents/domain.md`。
+单上下文：脚本所在目录 `CONTEXT.md` + 根目录的 `docs/adr/`。见 `docs/agents/domain.md`。
