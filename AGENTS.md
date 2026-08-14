@@ -1,6 +1,6 @@
 # AGENTS.md
 
-本仓库是若干 Tampermonkey userscript 的集合（根目录直接放 `.user.js` 文件，无构建系统）。
+本仓库是若干 Tampermonkey userscript 的集合（每个脚本一个目录，目录内直接放同名 `.user.js` 文件，无构建系统）。
 
 ## Agent skills
 

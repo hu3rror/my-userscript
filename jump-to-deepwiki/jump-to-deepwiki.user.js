@@ -9,8 +9,8 @@
 // @match                   *://github.com/*
 // @license                 MIT
 // @run-at                  document-end
-// @downloadURL             https://raw.githubusercontent.com/hu3rror/my-userscript/main/jump-to-deepwiki.user.js
-// @updateURL               https://raw.githubusercontent.com/hu3rror/my-userscript/main/jump-to-deepwiki.user.js
+// @downloadURL             https://raw.githubusercontent.com/hu3rror/my-userscript/main/jump-to-deepwiki/jump-to-deepwiki.user.js
+// @updateURL               https://raw.githubusercontent.com/hu3rror/my-userscript/main/jump-to-deepwiki/jump-to-deepwiki.user.js
 // @homepageURL             https://github.com/hu3rror/my-userscript
 // ==/UserScript==
 

@@ -10,8 +10,8 @@
 // @license                 MIT
 // @run-at                  document-end
 // @grant                   GM_addStyle
-// @downloadURL             https://raw.githubusercontent.com/hu3rror/my-userscript/main/steamdb-dlc-extractor.user.js
-// @updateURL               https://raw.githubusercontent.com/hu3rror/my-userscript/main/steamdb-dlc-extractor.user.js
+// @downloadURL             https://raw.githubusercontent.com/hu3rror/my-userscript/main/steamdb-dlc-extractor/steamdb-dlc-extractor.user.js
+// @updateURL               https://raw.githubusercontent.com/hu3rror/my-userscript/main/steamdb-dlc-extractor/steamdb-dlc-extractor.user.js
 // @homepageURL             https://github.com/hu3rror/my-userscript
 // ==/UserScript==
 

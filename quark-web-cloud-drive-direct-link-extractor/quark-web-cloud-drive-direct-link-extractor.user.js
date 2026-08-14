@@ -16,8 +16,8 @@
 // @grant                   unsafeWindow
 // @connect                 quark.cn
 // @connect                 drive.quark.cn
-// @downloadURL             https://raw.githubusercontent.com/hu3rror/my-userscript/main/quark-web-cloud-drive-direct-link-extractor.user.js
-// @updateURL               https://raw.githubusercontent.com/hu3rror/my-userscript/main/quark-web-cloud-drive-direct-link-extractor.user.js
+// @downloadURL             https://raw.githubusercontent.com/hu3rror/my-userscript/main/quark-web-cloud-drive-direct-link-extractor/quark-web-cloud-drive-direct-link-extractor.user.js
+// @updateURL               https://raw.githubusercontent.com/hu3rror/my-userscript/main/quark-web-cloud-drive-direct-link-extractor/quark-web-cloud-drive-direct-link-extractor.user.js
 // @homepageURL             https://github.com/hu3rror/my-userscript
 // ==/UserScript==
 

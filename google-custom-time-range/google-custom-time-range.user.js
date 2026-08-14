@@ -14,8 +14,8 @@
 // @run-at                  document-end
 // @grant                   none
 // @license                 MIT
-// @downloadURL             https://raw.githubusercontent.com/hu3rror/my-userscript/main/google-custom-time-range.user.js
-// @updateURL               https://raw.githubusercontent.com/hu3rror/my-userscript/main/google-custom-time-range.user.js
+// @downloadURL             https://raw.githubusercontent.com/hu3rror/my-userscript/main/google-custom-time-range/google-custom-time-range.user.js
+// @updateURL               https://raw.githubusercontent.com/hu3rror/my-userscript/main/google-custom-time-range/google-custom-time-range.user.js
 // @homepageURL             https://github.com/hu3rror/my-userscript
 // ==/UserScript==
 

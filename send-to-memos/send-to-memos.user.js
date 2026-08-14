@@ -16,8 +16,8 @@
 // @require         https://cdn.jsdelivr.net/npm/turndown@7.2.4/dist/turndown.js
 // @require         https://cdn.jsdelivr.net/npm/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js
 // @license         MIT
-// @downloadURL     https://raw.githubusercontent.com/hu3rror/my-userscript/main/send-to-memos.user.js
-// @updateURL       https://raw.githubusercontent.com/hu3rror/my-userscript/main/send-to-memos.user.js
+// @downloadURL     https://raw.githubusercontent.com/hu3rror/my-userscript/main/send-to-memos/send-to-memos.user.js
+// @updateURL       https://raw.githubusercontent.com/hu3rror/my-userscript/main/send-to-memos/send-to-memos.user.js
 // @homepageURL     https://github.com/hu3rror/my-userscript
 // ==/UserScript==
 

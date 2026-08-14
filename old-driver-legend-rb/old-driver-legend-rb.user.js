@@ -17,8 +17,8 @@
 // @grant                   GM_addStyle
 // @grant                   GM_openInTab
 // @run-at                  document-end
-// @downloadURL             https://raw.githubusercontent.com/hu3rror/my-userscript/main/old-driver-legend-rb.user.js
-// @updateURL               https://raw.githubusercontent.com/hu3rror/my-userscript/main/old-driver-legend-rb.user.js
+// @downloadURL             https://raw.githubusercontent.com/hu3rror/my-userscript/main/old-driver-legend-rb/old-driver-legend-rb.user.js
+// @updateURL               https://raw.githubusercontent.com/hu3rror/my-userscript/main/old-driver-legend-rb/old-driver-legend-rb.user.js
 // ==/UserScript==
 
 (function () {
