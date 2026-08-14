@@ -1,20 +1,22 @@
 // ==UserScript==
-// @name         Apple Music Link Helper
-// @name:zh-CN   Apple Music 链接助手
-// @name:zh-TW   Apple Music 連結助手
-// @name:ja      Apple Music リンク助手
-// @namespace    https://github.com/hu3rror/my-userscript
-// @version      2.4.2
-// @description  Copy ID, switch regions, and copy links for different countries on Apple Music.
-// @description:zh-CN 快速复制 Apple Music 页面 ID、切换或复制不同国家/地区的歌曲链接。
-// @description:zh-TW 快速複製 Apple Music 頁面 ID、切換或複製不同國家/地區的歌曲連結。
-// @description:ja   Apple Music ページで ID コピー、地域切り替え、および地域限定リンクのコピーを簡単に行えます。
-// @match        https://music.apple.com/*
-// @match        https://beta.music.apple.com/*
-// @grant        GM_setClipboard
-// @grant        GM_addStyle
-// @license      MIT
-// @homepageURL  https://github.com/hu3rror/my-userscript
+// @name                    Apple Music Link Helper
+// @name:zh-CN              Apple Music 链接助手
+// @name:zh-TW              Apple Music 連結助手
+// @name:ja                 Apple Music リンク助手
+// @namespace               https://github.com/hu3rror/my-userscript
+// @version                 2.4.2
+// @description             Copy ID, switch regions, and copy links for different countries on Apple Music.
+// @description:zh-CN       快速复制 Apple Music 页面 ID、切换或复制不同国家/地区的歌曲链接。
+// @description:zh-TW       快速複製 Apple Music 頁面 ID、切換或複製不同國家/地區的歌曲連結。
+// @description:ja          Apple Music ページで ID コピー、地域切り替え、および地域限定リンクのコピーを簡単に行えます。
+// @match                   https://music.apple.com/*
+// @match                   https://beta.music.apple.com/*
+// @grant                   GM_setClipboard
+// @grant                   GM_addStyle
+// @license                 MIT
+// @homepageURL             https://github.com/hu3rror/my-userscript
+// @downloadURL             https://raw.githubusercontent.com/hu3rror/my-userscript/main/apple-music-enhanced/apple-music-enhanced.user.js
+// @updateURL               https://raw.githubusercontent.com/hu3rror/my-userscript/main/apple-music-enhanced/apple-music-enhanced.user.js
 // ==/UserScript==
 
 (function () {
