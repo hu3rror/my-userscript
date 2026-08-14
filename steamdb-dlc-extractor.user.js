@@ -2,9 +2,9 @@
 // @name                    SteamDB DLC List Extractor
 // @name:zh-CN              SteamDB DLC 清单提取器
 // @namespace               https://github.com/hu3rror
-// @version                 1.0.1
-// @description             Extract DLC list from SteamDB with easy config generator for CreamAPI/GreenLuma.
-// @description:zh-CN       在 SteamDB 页面中批量提取 DLC 列表，支持一键生成并复制 CreamAPI、GreenLuma 等补丁所需的配置文件。
+// @version                 1.1.0
+// @description             Extract DLC list from SteamDB with easy config generator for CreamAPI/GreenLuma/OpenSteamTool.
+// @description:zh-CN       在 SteamDB 页面中批量提取 DLC 列表，支持一键生成并复制 CreamAPI、GreenLuma、OpenSteamTool 等补丁所需的配置文件。
 // @author                  Hu3rror
 // @match                   *://steamdb.info/app/*
 // @license                 MIT
@@ -415,6 +415,12 @@ DLC{dlcIndex}={dlcId}</dlcs>`
             type: "general",
             fileName: "<data>appId</data>_dlcDlcId.ini",
             text: `<dlcs>{dlcId}</dlcs>`
+        },
+        dlcOpenSteamToolLua: {
+            name: "OpenSteamTool (LUA MANIFEST)",
+            type: "lua",
+            fileName: "applist_<data>appId</data>.lua",
+            text: `<dlcs>addappid({dlcId}) -- {dlcName}</dlcs>`
         }
     };
 
@@ -674,6 +680,10 @@ DLC{dlcIndex}={dlcId}</dlcs>`
             // 安全转义 JSON & INI 双引号格式中的特殊字符与斜杠
             return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
         }
+        if (formatType === 'lua') {
+            // Lua 行尾注释：去掉换行，防止某行 DLC 名称中的换行把清单后续行注释掉
+            return str.replace(/\r\n|\r|\n/g, ' ').trim();
+        }
         return str;
     }
 
@@ -788,6 +798,8 @@ DLC{dlcIndex}={dlcId}</dlcs>`
             opt.textContent = format.name;
             select.appendChild(opt);
         });
+        // 默认选中 OpenSteamTool
+        select.value = 'dlcOpenSteamToolLua';
         controlRow.appendChild(select);
 
         const checkboxLabel = document.createElement('label');
