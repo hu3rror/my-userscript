@@ -2,7 +2,7 @@
 // @name                    Jump to DeepWiki and zread.ai from Github
 // @name:zh-CN              Github 跳转至 DeepWiki / zread.ai
 // @namespace               https://github.com/hu3rror
-// @version                 0.3.1
+// @version                 0.3.2
 // @description             Add anchors to jump to DeepWiki and zread.ai from Github. Optimized for branch switching and fast loading.
 // @description:zh-CN       在 Github 页面添加链接，跳转至 DeepWiki 及 zread.ai。针对分支切换与加载速度进行了深度优化。
 // @author                  Hu3rror (Original script by shiquda)
@@ -24,6 +24,9 @@
  * 2. Optimized injection time using `@run-at document-end` and GitHub's native `turbo:load` events.
  * 3. Fixed link desync bugs during client-side (SPA) routing transitions.
  * 4. Added zread.ai support with a modular design.
+ * 5. v0.3.2: watch DOM mutations to re-inject buttons when the header actions container is
+ *    re-mounted by GitHub's React UI (buttons were silently lost after navigating back to
+ *    the repo home via the nav "Code" tab).
  */
 
 (function () {
@@ -113,7 +116,8 @@
     // 统一处理按钮的创建和更新
     function createOrUpdateBtn(pageheadActions, id, url, textContent, svgCreator) {
         const className = `js-jump-to-${id}-anchor`;
-        const existingAnchor = document.querySelector(`.${className}`);
+        // 只在目标容器内查找，避免跨容器误判（容器被重挂载后旧按钮可能残留其他容器）
+        const existingAnchor = pageheadActions.querySelector(`.${className}`);
 
         // 如果链接已经存在，则检查并更新 href（防止 SPA 切换时链接失效）
         if (existingAnchor) {
@@ -216,11 +220,56 @@
         }
     }
 
+    // ---- 容器重挂载兑底：React 在新版 GitHub 中会重新挂载 header actions 容器，
+    // 新容器不含脚本按钮且不再触发 turbo:load。监听 DOM 变化，容器存在但按钮缺失时重新注入。 ----
+    let uiWatchStarted = false;
+    let reinjectPending = false;
+
+    function reinjectIfMissing() {
+        reinjectPending = false;
+
+        const desktop = document.querySelector('ul[data-testid="repo-header-actions"]')
+            || document.querySelector('ul.pagehead-actions');
+        const mobile = document.querySelector('[data-testid="responsive-social-buttons"]');
+
+        const needDesktop = !!desktop
+            && (!desktop.querySelector('.js-jump-to-deepwiki-anchor') || !desktop.querySelector('.js-jump-to-zread-anchor'));
+        const needMobile = !!mobile
+            && (!mobile.querySelector('.js-jump-to-deepwiki-anchor') || !mobile.querySelector('.js-jump-to-zread-anchor'));
+        if (!needDesktop && !needMobile) return;
+
+        const repoDetails = getRepoDetails();
+        if (!repoDetails) return;
+        if (needDesktop) CreateUI(repoDetails);
+        if (needMobile) CreateMobileUI(repoDetails);
+    }
+
+    function scheduleReinject() {
+        if (reinjectPending) return;
+        reinjectPending = true;
+        requestAnimationFrame(reinjectIfMissing);
+    }
+
+    function startUIWatcher() {
+        if (uiWatchStarted) return;
+        uiWatchStarted = true;
+        const observer = new MutationObserver(scheduleReinject);
+        observer.observe(document.body || document.documentElement, {
+            childList: true,
+            subtree: true
+        });
+    }
+
+    function boot() {
+        checkAndCreateUI();
+        startUIWatcher();
+    }
+
     if (document.readyState === 'complete') {
-        requestAnimationFrame(checkAndCreateUI);
+        requestAnimationFrame(boot);
     } else {
         window.addEventListener('load', () => {
-            requestAnimationFrame(checkAndCreateUI);
+            requestAnimationFrame(boot);
         });
     }
 
