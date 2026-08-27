@@ -40,7 +40,11 @@ _Avoid_：分享页、分享链接
 ### 下载基础设施
 
 **外部下载器（External Downloader）**：
-支持自定义 UA 和 Header 的第三方下载工具。包括 Gopeed、IDM（Internet Download Manager）、Motrix。
+支持自定义 UA 和 Header 的第三方下载工具。包括 Gopeed、Motrix Next、IDM（Internet Download Manager）。每个下载器通过各自独立的 API 契约接入，脚本为其维护独立的连接配置（地址、端口、Token）。
+
+**Motrix Next**：
+脚本实际对接的下载器（Tauri + Aria2 Next 重写版）。通过 aria2 JSON-RPC（`/jsonrpc`，默认端口 16800）接入，兼容旧版 Motrix，不兼容官方新版 Motrix 的 MDXP 协议。
+_Avoid_：Motrix、MDXP、Aria2 原生
 
 **下载配置（Download Configuration）**：
 在外部下载器中使用直链时必须提供的两项认证信息：UA 和 Cookie。缺少任一都会导致 403。
