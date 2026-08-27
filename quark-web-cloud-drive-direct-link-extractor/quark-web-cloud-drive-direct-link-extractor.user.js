@@ -2,7 +2,7 @@
 // @name                    Quark Web Cloud Drive Direct Link Extractor
 // @name:zh-CN              夸克网盘网页版直链提取器
 // @namespace               https://github.com/hu3rror
-// @version                 1.1.2
+// @version                 1.1.3
 // @description             Extract direct download links from Quark Web Cloud Drive with easy copier for Gopeed/IDM.
 // @description:zh-CN       在夸克网盘网页版中批量提取并复制文件的直接下载链接，提供外部下载器（Gopeed/IDM）专用UA与Cookie一键复制。
 // @author                  Hu3rror
@@ -226,12 +226,14 @@
         return new Promise((resolve, reject) => {
             const endpoint = `http://${config.motrix_host}:${config.motrix_port}/jsonrpc`;
             const options = {
-                dir: config.motrix_save_dir,
                 header: [
                     `User-Agent: ${REAL_QUARK_UA}`,
                     `Cookie: ${document.cookie}`
                 ]
             };
+            if (config.motrix_save_dir) {
+                options.dir = config.motrix_save_dir;
+            }
             const params = config.motrix_secret
                 ? ['token:' + config.motrix_secret, [url], options]
                 : [[url], options];
@@ -265,8 +267,8 @@
             return await sendToGopeed(url, config);
         }
         if (downloader === 'motrix') {
-            if (!config.motrix_host || !config.motrix_port || !config.motrix_save_dir) {
-                return { error: '请先配置 Motrix 连接信息及下载目录' };
+            if (!config.motrix_host || !config.motrix_port) {
+                return { error: '请先配置 Motrix 连接信息' };
             }
             return await sendToMotrix(url, config);
         }
@@ -300,8 +302,8 @@
             <div style="text-align:left;margin-bottom:15px;border:1px solid #ffebb8;background-color:#fffcf0;padding:10px;border-radius:6px;">
                 <p style="font-weight:bold;color:#b78103;margin:0 0 8px;">首次使用引导</p>
                 <p style="font-size:12px;color:#555;margin:0 0 4px;"><b>Gopeed</b>：设置 → 高级 → 通信协议 → 改为 TCP，记下端口号</p>
-                <p style="font-size:12px;color:#555;margin:0 0 4px;"><b>Motrix（Next）</b>：填 RPC 端口（默认 16800）和下载目录</p>
-                <p style="font-size:12px;color:#555;margin:0;">如 Motrix 设置了 RPC Secret，填在 Secret 栏（留空则不使用）</p>
+                <p style="font-size:12px;color:#555;margin:0 0 4px;"><b>Motrix（Next）</b>：填 RPC 端口（默认 16800）</p>
+                <p style="font-size:12px;color:#555;margin:0;">下载目录可留空，将使用 Motrix 的默认下载目录</p>
             </div>
         ` : '';
 
@@ -341,8 +343,8 @@
                         <input id="swal-motrix-secret" class="swal2-input" style="margin:0;" placeholder="留空则不使用" value="${cfg.motrix_secret}">
                     </div>
                     <div style="margin-bottom:12px;">
-                        <label style="font-size:12px;color:#666;">下载目录（必填）</label>
-                        <input id="swal-motrix-save-dir" class="swal2-input" style="margin:0;" placeholder="如 D:/Downloads" value="${cfg.motrix_save_dir}">
+                        <label style="font-size:12px;color:#666;">下载目录（可选，留空用默认）</label>
+                        <input id="swal-motrix-save-dir" class="swal2-input" style="margin:0;" placeholder="留空则使用 Motrix 默认下载目录" value="${cfg.motrix_save_dir}">
                     </div>
 
                     <h4 style="margin:12px 0 8px;font-size:14px;">高级</h4>
@@ -538,7 +540,7 @@
                 showConfigDialog(true);
                 return;
             }
-            if (downloader === 'motrix' && (!config.motrix_host || !config.motrix_port || !config.motrix_save_dir)) {
+            if (downloader === 'motrix' && (!config.motrix_host || !config.motrix_port)) {
                 showConfigDialog(true);
                 return;
             }
@@ -570,7 +572,7 @@
                 showConfigDialog(true);
                 return;
             }
-            if (downloader === 'motrix' && (!config.motrix_host || !config.motrix_port || !config.motrix_save_dir)) {
+            if (downloader === 'motrix' && (!config.motrix_host || !config.motrix_port)) {
                 showConfigDialog(true);
                 return;
             }
