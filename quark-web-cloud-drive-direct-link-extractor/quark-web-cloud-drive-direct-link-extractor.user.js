@@ -2,7 +2,7 @@
 // @name                    Quark Web Cloud Drive Direct Link Extractor
 // @name:zh-CN              夸克网盘网页版直链提取器
 // @namespace               https://github.com/hu3rror
-// @version                 1.1.0
+// @version                 1.1.1
 // @description             Extract direct download links from Quark Web Cloud Drive with easy copier for Gopeed/IDM.
 // @description:zh-CN       在夸克网盘网页版中批量提取并复制文件的直接下载链接，提供外部下载器（Gopeed/IDM）专用UA与Cookie一键复制。
 // @author                  Hu3rror
@@ -78,45 +78,16 @@
                 color: white;
                 border-color: #28a745;
             }
-            .okv-dropdown {
-                position: relative;
-                display: inline-block;
-            }
-            .okv-dropdown-menu {
-                display: none;
-                position: absolute;
-                top: 100%;
-                left: 0;
-                z-index: 1000;
-                min-width: 90px;
-                background: #fff;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                padding: 4px 0;
-            }
-            .okv-dropdown-menu.show {
-                display: block;
-            }
-            .okv-dropdown-item {
-                display: block;
-                width: 100%;
-                padding: 6px 14px;
-                text-align: left;
-                background: none;
-                border: none;
-                cursor: pointer;
-                font-size: 12px;
-                color: #333;
-                white-space: nowrap;
-            }
-            .okv-dropdown-item:hover {
-                background-color: #f5f5f5;
-            }
             .okv-settings-btn {
                 padding: 4px 8px;
                 font-size: 16px;
                 line-height: 1;
+            }
+            .okv-pick-btn {
+                width: 100%;
+                padding: 10px;
+                margin: 4px 0;
+                font-size: 14px;
             }
         `;
         const styleSheet = document.createElement("style");
@@ -197,6 +168,7 @@
         gopeed_token: '',
         motrix_endpoint: 'http://127.0.0.1:16801',
         motrix_token: '',
+        motrix_save_dir: '',
         batch_concurrency: 0
     };
 
@@ -252,18 +224,27 @@
     const sendToMotrix = (url, config) => {
         return new Promise((resolve, reject) => {
             const endpoint = `${config.motrix_endpoint}/mdxp`;
-            const params = config.motrix_token
-                ? [`token:${config.motrix_token}`, [url], { header: [`User-Agent: ${REAL_QUARK_UA}`, `Cookie: ${document.cookie}`] }]
-                : [[url], { header: [`User-Agent: ${REAL_QUARK_UA}`, `Cookie: ${document.cookie}`] }];
+            const headers = { 'Content-Type': 'application/json' };
+            if (config.motrix_token) {
+                headers['Authorization'] = `Bearer ${config.motrix_token}`;
+            }
             GM_xmlhttpRequest({
                 url: endpoint,
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: headers,
                 data: JSON.stringify({
                     jsonrpc: '2.0',
-                    id: '1',
-                    method: 'aria2.addUri',
-                    params: params
+                    id: 1,
+                    method: 'download/add',
+                    params: {
+                        kind: 'url',
+                        saveDir: config.motrix_save_dir,
+                        uris: [url],
+                        headers: [
+                            { name: 'User-Agent', value: REAL_QUARK_UA },
+                            { name: 'Cookie', value: document.cookie }
+                        ]
+                    }
                 }),
                 onload: res => {
                     try {
@@ -285,8 +266,8 @@
             return await sendToGopeed(url, config);
         }
         if (downloader === 'motrix') {
-            if (!config.motrix_endpoint) {
-                return { error: '请先配置 Motrix 连接信息' };
+            if (!config.motrix_endpoint || !config.motrix_save_dir) {
+                return { error: '请先配置 Motrix 连接信息及下载目录' };
             }
             return await sendToMotrix(url, config);
         }
@@ -320,7 +301,8 @@
             <div style="text-align:left;margin-bottom:15px;border:1px solid #ffebb8;background-color:#fffcf0;padding:10px;border-radius:6px;">
                 <p style="font-weight:bold;color:#b78103;margin:0 0 8px;">首次使用引导</p>
                 <p style="font-size:12px;color:#555;margin:0 0 4px;"><b>Gopeed</b>：设置 → 高级 → 通信协议 → 改为 TCP，记下端口号</p>
-                <p style="font-size:12px;color:#555;margin:0;">Motrix bridge 默认端口 16801，可在设置页查看</p>
+                <p style="font-size:12px;color:#555;margin:0 0 4px;"><b>Motrix</b>：填写 bridge 地址（默认端口 16801）和下载目录</p>
+                <p style="font-size:12px;color:#555;margin:0;">如 Motrix 设置了 Token，在端点地址旁填入（留空则不使用）</p>
             </div>
         ` : '';
 
@@ -350,8 +332,12 @@
                         <input id="swal-motrix-endpoint" class="swal2-input" style="margin:0;" value="${cfg.motrix_endpoint}">
                     </div>
                     <div style="margin-bottom:12px;">
-                        <label style="font-size:12px;color:#666;">RPC Secret（可选）</label>
+                        <label style="font-size:12px;color:#666;">Token（可选）</label>
                         <input id="swal-motrix-token" class="swal2-input" style="margin:0;" placeholder="留空则不使用" value="${cfg.motrix_token}">
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px;color:#666;">下载目录（必填）</label>
+                        <input id="swal-motrix-save-dir" class="swal2-input" style="margin:0;" placeholder="如 D:/Downloads" value="${cfg.motrix_save_dir}">
                     </div>
 
                     <h4 style="margin:12px 0 8px;font-size:14px;">高级</h4>
@@ -374,6 +360,7 @@
                     gopeed_token: document.getElementById('swal-gopeed-token').value.trim() || '',
                     motrix_endpoint: document.getElementById('swal-motrix-endpoint').value.trim() || DOWNLOADER_DEFAULTS.motrix_endpoint,
                     motrix_token: document.getElementById('swal-motrix-token').value.trim() || '',
+                    motrix_save_dir: document.getElementById('swal-motrix-save-dir').value.trim() || '',
                     batch_concurrency: parseInt(document.getElementById('swal-batch-concurrency').value) || 0
                 };
             }
@@ -400,7 +387,7 @@
 
     const generateDom = (list) => {
         let rows = "";
-        list.forEach((e, idx) => {
+        list.forEach(e => {
             rows += `
             <tr>
                 <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${e.file_name}">${e.file_name}</td>
@@ -408,13 +395,7 @@
                 <td>
                     <button class="okv-btn okv-btn-primary quark-copy-item" data-url="${e.download_url}">复制链接</button>
                     <button class="okv-btn quark-down-item" data-url="${e.download_url}">直接下载</button>
-                    <div class="okv-dropdown">
-                        <button class="okv-btn okv-dropdown-toggle" data-url="${e.download_url}" data-idx="${idx}">发送到 ▾</button>
-                        <div class="okv-dropdown-menu">
-                            <button class="okv-dropdown-item quark-send-gopeed" data-url="${e.download_url}">Gopeed</button>
-                            <button class="okv-dropdown-item quark-send-motrix" data-url="${e.download_url}">Motrix</button>
-                        </div>
-                    </div>
+                    <button class="okv-btn quark-send-to" data-url="${e.download_url}">发送到</button>
                 </td>
             </tr>`;
         });
@@ -422,13 +403,8 @@
         return `
         <div style="text-align: left; max-height: 450px; overflow-y: auto; padding: 5px;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-                <div class="okv-dropdown">
-                    <button class="okv-btn okv-btn-primary okv-batch-send-toggle">▼ 全部发送到</button>
-                    <div class="okv-dropdown-menu">
-                        <button class="okv-dropdown-item quark-batch-gopeed">全部 → Gopeed</button>
-                        <button class="okv-dropdown-item quark-batch-motrix">全部 → Motrix</button>
-                    </div>
-                </div>
+                <button class="okv-btn okv-btn-primary quark-batch-gopeed">全部 → Gopeed</button>
+                <button class="okv-btn okv-btn-primary quark-batch-motrix">全部 → Motrix</button>
                 <button class="okv-btn okv-settings-btn" title="下载器设置">⚙️</button>
             </div>
 
@@ -524,30 +500,29 @@
             }, 1500);
         });
 
-        // ================== 下拉菜单切换 ==================
-        $(document).off("click", ".okv-dropdown-toggle").on("click", ".okv-dropdown-toggle", function (e) {
-            e.stopPropagation();
-            const menu = $(this).siblings(".okv-dropdown-menu");
-            $(".okv-dropdown-menu").not(menu).removeClass("show");
-            menu.toggleClass("show");
-        });
-
-        $(document).off("click", ".okv-batch-send-toggle").on("click", ".okv-batch-send-toggle", function (e) {
-            e.stopPropagation();
-            const menu = $(this).siblings(".okv-dropdown-menu");
-            $(".okv-dropdown-menu").not(menu).removeClass("show");
-            menu.toggleClass("show");
-        });
-
-        // 点击其他地方关闭下拉菜单
-        $(document).off("click.okv-close-dropdown").on("click.okv-close-dropdown", () => {
-            $(".okv-dropdown-menu").removeClass("show");
-        });
-
-        // 点击下拉菜单项不冒泡
-        $(document).off("click", ".okv-dropdown-item").on("click", ".okv-dropdown-item", function (e) {
-            e.stopPropagation();
-            $(this).closest(".okv-dropdown-menu").removeClass("show");
+        // ================== 发送到下载器（选择菜单） ==================
+        $(document).off("click", ".quark-send-to").on("click", ".quark-send-to", function () {
+            const url = this.dataset.url;
+            Swal.fire({
+                title: '发送到下载器',
+                html: `
+                    <div style="padding: 5px;">
+                        <button id="okv-pick-gopeed" class="okv-btn okv-btn-primary okv-pick-btn">Gopeed</button>
+                        <button id="okv-pick-motrix" class="okv-btn okv-btn-primary okv-pick-btn">Motrix</button>
+                    </div>`,
+                showConfirmButton: false,
+                showCloseButton: true,
+                didOpen: () => {
+                    document.getElementById('okv-pick-gopeed').onclick = () => {
+                        Swal.close();
+                        handleSingleSend(url, 'gopeed');
+                    };
+                    document.getElementById('okv-pick-motrix').onclick = () => {
+                        Swal.close();
+                        handleSingleSend(url, 'motrix');
+                    };
+                }
+            });
         });
 
         // ================== 单个发送到下载器 ==================
@@ -557,7 +532,7 @@
                 showConfigDialog(true);
                 return;
             }
-            if (downloader === 'motrix' && !config.motrix_endpoint) {
+            if (downloader === 'motrix' && (!config.motrix_endpoint || !config.motrix_save_dir)) {
                 showConfigDialog(true);
                 return;
             }
@@ -572,7 +547,8 @@
             Swal.close();
 
             if (result.error) {
-                Swal.fire({ icon: 'error', title: '发送失败', text: result.error });
+                const msg = typeof result.error === 'object' && result.error.message ? result.error.message : String(result.error);
+                Swal.fire({ icon: 'error', title: '发送失败', text: msg });
             } else if (result.code !== undefined && result.code !== 0) {
                 Swal.fire({ icon: 'error', title: '发送失败', text: `下载器返回错误 (${result.code})` });
             } else {
@@ -580,13 +556,6 @@
             }
         };
 
-        $(document).off("click", ".quark-send-gopeed").on("click", ".quark-send-gopeed", function () {
-            handleSingleSend(this.dataset.url, 'gopeed');
-        });
-
-        $(document).off("click", ".quark-send-motrix").on("click", ".quark-send-motrix", function () {
-            handleSingleSend(this.dataset.url, 'motrix');
-        });
 
         // ================== 批量发送到下载器 ==================
         const handleBatchSend = async (downloader) => {
@@ -595,7 +564,7 @@
                 showConfigDialog(true);
                 return;
             }
-            if (downloader === 'motrix' && !config.motrix_endpoint) {
+            if (downloader === 'motrix' && (!config.motrix_endpoint || !config.motrix_save_dir)) {
                 showConfigDialog(true);
                 return;
             }
