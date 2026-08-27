@@ -2,7 +2,7 @@
 // @name                    Quark Web Cloud Drive Direct Link Extractor
 // @name:zh-CN              夸克网盘网页版直链提取器
 // @namespace               https://github.com/hu3rror
-// @version                 1.1.3
+// @version                 1.1.4
 // @description             Extract direct download links from Quark Web Cloud Drive with easy copier for Gopeed/IDM.
 // @description:zh-CN       在夸克网盘网页版中批量提取并复制文件的直接下载链接，提供外部下载器（Gopeed/IDM）专用UA与Cookie一键复制。
 // @author                  Hu3rror
@@ -187,6 +187,18 @@
         }
     };
 
+    const DOWNLOADER_NAMES = { gopeed: 'Gopeed', motrix: 'Motrix' };
+
+    const validateDownloaderConfig = (downloader, config) => {
+        if (downloader === 'gopeed' && (!config.gopeed_host || !config.gopeed_port)) {
+            return '请先配置 Gopeed 连接信息';
+        }
+        if (downloader === 'motrix' && (!config.motrix_host || !config.motrix_port)) {
+            return '请先配置 Motrix 连接信息';
+        }
+        return null;
+    };
+
     // ================== 下载器 API 交互 ==================
     const sendToGopeed = (url, config) => {
         return new Promise((resolve, reject) => {
@@ -260,17 +272,19 @@
     };
 
     const sendSingleToDownloader = async (url, downloader, config) => {
-        if (downloader === 'gopeed') {
-            if (!config.gopeed_host || !config.gopeed_port) {
-                return { error: '请先配置 Gopeed 连接信息' };
-            }
-            return await sendToGopeed(url, config);
+        const cfgError = validateDownloaderConfig(downloader, config);
+        if (cfgError) {
+            return { error: cfgError };
         }
-        if (downloader === 'motrix') {
-            if (!config.motrix_host || !config.motrix_port) {
-                return { error: '请先配置 Motrix 连接信息' };
+        try {
+            if (downloader === 'gopeed') {
+                return await sendToGopeed(url, config);
             }
-            return await sendToMotrix(url, config);
+            if (downloader === 'motrix') {
+                return await sendToMotrix(url, config);
+            }
+        } catch (err) {
+            return { error: err && err.message ? err.message : String(err) };
         }
         return { error: `未知下载器: ${downloader}` };
     };
@@ -536,17 +550,15 @@
         // ================== 单个发送到下载器 ==================
         const handleSingleSend = async (url, downloader) => {
             const config = getDownloaderConfig();
-            if (downloader === 'gopeed' && (!config.gopeed_host || !config.gopeed_port)) {
+            const cfgError = validateDownloaderConfig(downloader, config);
+            if (cfgError) {
                 showConfigDialog(true);
                 return;
             }
-            if (downloader === 'motrix' && (!config.motrix_host || !config.motrix_port)) {
-                showConfigDialog(true);
-                return;
-            }
+            const name = DOWNLOADER_NAMES[downloader] || downloader;
 
             Swal.fire({
-                title: '正在发送到 ' + (downloader === 'gopeed' ? 'Gopeed' : 'Motrix') + '...',
+                title: '正在发送到 ' + name + '...',
                 allowOutsideClick: false,
                 didOpen: () => Swal.showLoading()
             });
@@ -560,22 +572,19 @@
             } else if (result.code !== undefined && result.code !== 0) {
                 Swal.fire({ icon: 'error', title: '发送失败', text: `下载器返回错误 (${result.code})` });
             } else {
-                Swal.fire({ icon: 'success', title: '已发送到 ' + (downloader === 'gopeed' ? 'Gopeed' : 'Motrix'), timer: 1500, showConfirmButton: false });
+                Swal.fire({ icon: 'success', title: '已发送到 ' + name, timer: 1500, showConfirmButton: false });
             }
         };
-
 
         // ================== 批量发送到下载器 ==================
         const handleBatchSend = async (downloader) => {
             const config = getDownloaderConfig();
-            if (downloader === 'gopeed' && (!config.gopeed_host || !config.gopeed_port)) {
+            const cfgError = validateDownloaderConfig(downloader, config);
+            if (cfgError) {
                 showConfigDialog(true);
                 return;
             }
-            if (downloader === 'motrix' && (!config.motrix_host || !config.motrix_port)) {
-                showConfigDialog(true);
-                return;
-            }
+            const name = DOWNLOADER_NAMES[downloader] || downloader;
 
             const urls = _lastData.map(e => e.download_url).filter(Boolean);
             if (urls.length === 0) {
@@ -586,7 +595,7 @@
             const confirm = await Swal.fire({
                 icon: 'question',
                 title: '确认批量发送',
-                text: `将 ${urls.length} 个文件发送到 ${downloader === 'gopeed' ? 'Gopeed' : 'Motrix'}，是否继续？`,
+                text: `将 ${urls.length} 个文件发送到 ${name}，是否继续？`,
                 showCancelButton: true,
                 confirmButtonText: '发送',
                 cancelButtonText: '取消',
@@ -604,7 +613,7 @@
             Swal.close();
 
             if (results.fail === 0) {
-                Swal.fire({ icon: 'success', title: '全部发送成功', text: `${results.success} 个文件已发送到 ${downloader === 'gopeed' ? 'Gopeed' : 'Motrix'}` });
+                Swal.fire({ icon: 'success', title: '全部发送成功', text: `${results.success} 个文件已发送到 ${name}` });
             } else if (results.success === 0) {
                 Swal.fire({ icon: 'error', title: '全部发送失败', text: `${results.fail} 个文件发送失败，请检查下载器状态` });
             } else {
