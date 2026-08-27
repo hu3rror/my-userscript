@@ -2,7 +2,7 @@
 // @name                    Quark Web Cloud Drive Direct Link Extractor
 // @name:zh-CN              夸克网盘网页版直链提取器
 // @namespace               https://github.com/hu3rror
-// @version                 1.2.0
+// @version                 1.2.1
 // @description             Extract direct download links from Quark Web Cloud Drive, push to Gopeed/Motrix or copy full config (URL+UA+Cookie) for manual use.
 // @description:zh-CN       在夸克网盘网页版中批量提取文件的直接下载链接，支持一键推送至外部下载器（Gopeed/Motrix）创建下载任务，或复制链接+UA+Cookie 完整配置供手动使用。
 // @author                  Hu3rror
@@ -218,6 +218,72 @@
                 margin: 4px 0;
                 font-size: 14px;
             }
+
+            /* ===== 复制配置小窗 ===== */
+            .okv-copy-dialog p {
+                font-size: 13px;
+                color: var(--okv-text-secondary);
+                margin: 0 0 10px;
+                text-align: left;
+            }
+
+            /* ===== 下载器设置 ===== */
+            .okv-config-dialog {
+                text-align: left;
+            }
+            .okv-config-dialog .swal2-input {
+                width: 100%;
+                max-width: 100%;
+                min-width: 0;
+                box-sizing: border-box;
+                margin: 4px 0 0; /* 清除 swal2-input 默认 1em 2em 外边距，避免横向溢出 */
+                font-size: 14px;
+            }
+            .okv-config-section {
+                font-size: 14px;
+                font-weight: 600;
+                color: var(--okv-text);
+                margin: 16px 0 8px;
+            }
+            .okv-config-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px 12px;
+            }
+            .okv-config-field {
+                min-width: 0;
+            }
+            .okv-config-field label {
+                display: block;
+                font-size: 12px;
+                color: var(--okv-text-secondary);
+                margin-bottom: 4px;
+            }
+            .okv-config-hint {
+                font-size: 11px;
+                color: var(--okv-text-secondary);
+                margin-top: 6px;
+            }
+            .okv-guide {
+                background: var(--okv-primary-weak);
+                border: 1px solid rgba(0, 202, 171, 0.3);
+                border-radius: 8px;
+                padding: 10px 12px;
+                margin-bottom: 14px;
+                text-align: left;
+            }
+            .okv-guide h4 {
+                margin: 0 0 8px;
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--okv-primary);
+            }
+            .okv-guide p {
+                margin: 0 0 4px;
+                font-size: 12px;
+                color: var(--okv-text);
+                line-height: 1.6;
+            }
         `;
         const styleSheet = document.createElement("style");
         styleSheet.innerText = styles;
@@ -314,6 +380,7 @@
         for (const [key, value] of Object.entries(cfg)) {
             GM_setValue(key, value);
         }
+        GM_setValue('okv_config_initialized', true);
     };
 
     const DOWNLOADER_NAMES = { gopeed: 'Gopeed', motrix: 'Motrix' };
@@ -442,60 +509,63 @@
     const showConfigDialog = (firstTime = false) => {
         const cfg = getDownloaderConfig();
         const guideHtml = firstTime ? `
-            <div style="text-align:left;margin-bottom:15px;border:1px solid #ffebb8;background-color:#fffcf0;padding:10px;border-radius:6px;">
-                <p style="font-weight:bold;color:#b78103;margin:0 0 8px;">首次使用引导</p>
-                <p style="font-size:12px;color:#555;margin:0 0 4px;"><b>Gopeed</b>：设置 → 高级 → 通信协议 → 改为 TCP，记下端口号</p>
-                <p style="font-size:12px;color:#555;margin:0 0 4px;"><b>Motrix（Next）</b>：填 RPC 端口（默认 16800）</p>
-                <p style="font-size:12px;color:#555;margin:0;">下载目录可留空，将使用 Motrix 的默认下载目录</p>
+            <div class="okv-guide">
+                <h4>首次使用引导</h4>
+                <p><b>Gopeed</b>：设置 → 高级 → 通信协议 → 改为 TCP，记下端口号</p>
+                <p><b>Motrix / Aria2</b>：填 RPC 端口（默认 16800），兼容 aria2 JSON-RPC 的下载器</p>
+                <p>下载目录可留空，将使用下载器的默认下载目录</p>
             </div>
         ` : '';
 
         Swal.fire({
             title: '下载器设置',
+            width: '600px',
             html: guideHtml + `
-                <div style="text-align:left;">
-                    <h4 style="margin:0 0 8px;font-size:14px;">Gopeed</h4>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-                        <div>
-                            <label style="font-size:12px;color:#666;">地址</label>
-                            <input id="swal-gopeed-host" class="swal2-input" style="margin:0;" value="${cfg.gopeed_host}">
+                <div class="okv-panel okv-config-dialog">
+                    <div class="okv-config-section">Gopeed</div>
+                    <div class="okv-config-grid">
+                        <div class="okv-config-field">
+                            <label>地址</label>
+                            <input id="swal-gopeed-host" class="swal2-input" value="${cfg.gopeed_host}">
                         </div>
-                        <div>
-                            <label style="font-size:12px;color:#666;">端口</label>
-                            <input id="swal-gopeed-port" class="swal2-input" style="margin:0;" value="${cfg.gopeed_port}">
+                        <div class="okv-config-field">
+                            <label>端口</label>
+                            <input id="swal-gopeed-port" class="swal2-input" value="${cfg.gopeed_port}">
                         </div>
                     </div>
-                    <div style="margin-bottom:12px;">
-                        <label style="font-size:12px;color:#666;">API Token（可选）</label>
-                        <input id="swal-gopeed-token" class="swal2-input" style="margin:0;" placeholder="留空则不使用" value="${cfg.gopeed_token}">
+                    <div class="okv-config-field" style="margin-top:10px;">
+                        <label>API Token（可选）</label>
+                        <input id="swal-gopeed-token" class="swal2-input" placeholder="留空则不使用" value="${cfg.gopeed_token}">
                     </div>
 
-                    <h4 style="margin:12px 0 8px;font-size:14px;">Motrix (Next)</h4>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-                        <div>
-                            <label style="font-size:12px;color:#666;">地址</label>
-                            <input id="swal-motrix-host" class="swal2-input" style="margin:0;" value="${cfg.motrix_host}">
+                    <div class="okv-config-section">Motrix / Aria2</div>
+                    <div class="okv-config-grid">
+                        <div class="okv-config-field">
+                            <label>地址</label>
+                            <input id="swal-motrix-host" class="swal2-input" value="${cfg.motrix_host}">
                         </div>
-                        <div>
-                            <label style="font-size:12px;color:#666;">RPC 端口</label>
-                            <input id="swal-motrix-port" class="swal2-input" style="margin:0;" value="${cfg.motrix_port}">
+                        <div class="okv-config-field">
+                            <label>RPC 端口</label>
+                            <input id="swal-motrix-port" class="swal2-input" value="${cfg.motrix_port}">
                         </div>
                     </div>
-                    <div style="margin-bottom:12px;">
-                        <label style="font-size:12px;color:#666;">RPC Secret（可选）</label>
-                        <input id="swal-motrix-secret" class="swal2-input" style="margin:0;" placeholder="留空则不使用" value="${cfg.motrix_secret}">
-                    </div>
-                    <div style="margin-bottom:12px;">
-                        <label style="font-size:12px;color:#666;">下载目录（可选，留空用默认）</label>
-                        <input id="swal-motrix-save-dir" class="swal2-input" style="margin:0;" placeholder="留空则使用 Motrix 默认下载目录" value="${cfg.motrix_save_dir}">
+                    <div class="okv-config-grid" style="margin-top:10px;">
+                        <div class="okv-config-field">
+                            <label>RPC Secret（可选）</label>
+                            <input id="swal-motrix-secret" class="swal2-input" placeholder="留空则不使用" value="${cfg.motrix_secret}">
+                        </div>
+                        <div class="okv-config-field">
+                            <label>下载目录（可选）</label>
+                            <input id="swal-motrix-save-dir" class="swal2-input" placeholder="留空用默认目录" value="${cfg.motrix_save_dir}">
+                        </div>
                     </div>
 
-                    <h4 style="margin:12px 0 8px;font-size:14px;">高级</h4>
-                    <div style="margin-bottom:4px;">
-                        <label style="font-size:12px;color:#666;">同时发送任务数（0=全部）</label>
-                        <input id="swal-batch-concurrency" class="swal2-input" style="margin:0;" type="number" min="0" value="${cfg.batch_concurrency}">
+                    <div class="okv-config-section">高级</div>
+                    <div class="okv-config-field">
+                        <label>同时发送任务数（0=全部）</label>
+                        <input id="swal-batch-concurrency" class="swal2-input" type="number" min="0" value="${cfg.batch_concurrency}">
                     </div>
-                    <p style="font-size:11px;color:#999;margin:0;">设为 0 则全部同时发送，设为 3 则每次发送 3 个任务</p>
+                    <p class="okv-config-hint">设为 0 则全部同时发送，设为 3 则每次发送 3 个任务</p>
                 </div>
             `,
             showCancelButton: true,
@@ -580,7 +650,7 @@
                 </table>
             </div>
 
-            <div class="okv-hint">复制配置：一次复制 链接 + UA + Cookie，供 IDM 等未接入下载器手动添加任务</div>
+            <div class="okv-hint">复制配置：弹出复制 链接 / UA / Cookie，供 IDM 等未接入下载器手动添加任务</div>
         </div>`;
     };
 
@@ -616,14 +686,9 @@
             window.open(e.target.dataset.url, "_blank");
         });
 
-        // 复制配置（链接 + UA + Cookie，供未接入下载器手动添加任务）
-        $(document).off("click", ".quark-copy-config").on("click", ".quark-copy-config", e => {
-            const text = `URL: ${e.target.dataset.url}\nUser-Agent: ${REAL_QUARK_UA}\nCookie: ${document.cookie}`;
-            GM_setClipboard(text);
-            e.target.innerText = "已复制";
-            setTimeout(() => {
-                e.target.innerText = "复制配置";
-            }, 1500);
+        // 复制配置：弹出小窗，可分别复制链接 / UA / Cookie
+        $(document).off("click", ".quark-copy-config").on("click", ".quark-copy-config", function () {
+            showCopyConfigDialog(this.dataset.url);
         });
 
         // ================== 发送到下载器（选择菜单） ==================
@@ -739,6 +804,59 @@
         });
     };
 
+    // 展示直链结果面板（供复制配置小窗"返回"时重新打开）
+    const showResultPanel = (data) => {
+        if (data) _lastData = data;
+        Swal.fire({
+            title: '直链提取成功',
+            html: generateDom(_lastData),
+            showConfirmButton: true,
+            confirmButtonText: '关闭',
+            confirmButtonColor: '#00caab',
+            width: '720px'
+        });
+        bindCommonEvents();
+    };
+
+    // 复制配置小窗：复制链接 / UA / Cookie，离开时返回结果面板
+    const showCopyConfigDialog = (url) => {
+        Swal.fire({
+            title: '复制下载配置',
+            width: '440px',
+            html: `
+                <div class="okv-panel okv-copy-dialog" style="padding:5px;">
+                    <p>直链需搭配 UA 与 Cookie 使用，否则粘贴到下载器会 403。复制完成后点击「返回」回到结果面板。</p>
+                    <button id="okv-copy-url" class="okv-btn okv-btn-default okv-pick-btn">复制链接</button>
+                    <button id="okv-copy-ua" class="okv-btn okv-btn-default okv-pick-btn">复制 UA</button>
+                    <button id="okv-copy-cookie" class="okv-btn okv-btn-default okv-pick-btn">复制 Cookie</button>
+                </div>`,
+            showCancelButton: true,
+            cancelButtonText: '返回',
+            showConfirmButton: false,
+            showCloseButton: true,
+            didOpen: () => {
+                document.getElementById('okv-copy-url').onclick = (e) => {
+                    GM_setClipboard(url);
+                    e.target.innerText = '链接已复制';
+                    setTimeout(() => { e.target.innerText = '复制链接'; }, 1500);
+                };
+                document.getElementById('okv-copy-ua').onclick = (e) => {
+                    GM_setClipboard(REAL_QUARK_UA);
+                    e.target.innerText = 'UA 已复制';
+                    setTimeout(() => { e.target.innerText = '复制 UA'; }, 1500);
+                };
+                document.getElementById('okv-copy-cookie').onclick = (e) => {
+                    GM_setClipboard(document.cookie);
+                    e.target.innerText = 'Cookie 已复制';
+                    setTimeout(() => { e.target.innerText = '复制 Cookie'; }, 1500);
+                };
+            }
+        }).then(() => {
+            // 无论返回/关闭/点背景，都回到结果面板，避免重新提取直链
+            showResultPanel();
+        });
+    };
+
     const initButton = (selector, btnHtml) => {
         autoLazyload(() => $(selector).length > 0, () => {
             if ($(selector).find(".okv-btn-direct").length === 0) {
@@ -799,15 +917,7 @@
                         return e;
                     });
 
-                    Swal.fire({
-                        title: '直链提取成功',
-                        html: generateDom(data),
-                        showConfirmButton: true,
-                        confirmButtonText: '关闭',
-                        confirmButtonColor: '#00caab',
-                        width: '720px'
-                    });
-                    bindCommonEvents(data);
+                    showResultPanel(data);
                 }).catch(err => {
                     Swal.close();
                     Swal.fire({ icon: 'error', title: '网络异常', text: err.toString() });
@@ -833,9 +943,21 @@
         }
     };
 
+    let _firstUseGuided = false;
+    const maybeGuideFirstUse = () => {
+        if (_firstUseGuided) return;
+        if (!window.location.href.includes('/list')) return;
+        if (GM_getValue('okv_config_initialized', false)) return;
+        if (GM_getValue('okv_guided', false)) return;
+        _firstUseGuided = true;
+        GM_setValue('okv_guided', true);
+        setTimeout(() => showConfigDialog(true), 300);
+    };
+
     const init = () => {
         injectStyles();
         run();
+        maybeGuideFirstUse();
 
         // 监听路由变化，以便在单页应用导航时重新挂载按钮
         window.addEventListener("hashchange", async () => {

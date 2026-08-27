@@ -46,7 +46,7 @@ _Avoid_：浏览器下载
 _Avoid_：推送到下载器
 
 **复制配置（Copy Configuration）**：
-一次复制某文件的「链接 + UA + Cookie」组合文本，供未接入的下载器（如 IDM）手动添加任务。
+某文件行的操作按钮，点击弹出小窗，可分别复制该文件的链接、UA、Cookie，小窗可返回结果面板。供未接入的下载器（如 IDM）手动添加任务。
 _Avoid_：复制链接（纯链接粘贴到下载器会 403）
 
 **表头工具栏（List Toolbar）**：
@@ -58,7 +58,7 @@ _Avoid_：复制链接（纯链接粘贴到下载器会 403）
 支持自定义 UA 和 Header 的第三方下载工具。包括 Gopeed、Motrix Next、IDM（Internet Download Manager）。每个下载器通过各自独立的 API 契约接入，脚本为其维护独立的连接配置（地址、端口、Token）。
 
 **Motrix Next**：
-脚本实际对接的下载器（Tauri + Aria2 Next 重写版）。通过 aria2 JSON-RPC（`/jsonrpc`，默认端口 16800）接入，兼容旧版 Motrix，不兼容官方新版 Motrix 的 MDXP 协议。
+脚本实际对接的下载器（Tauri + Aria2 Next 重写版）。通过 aria2 JSON-RPC（`/jsonrpc`，默认端口 16800）接入，兼容旧版 Motrix，不兼容官方新版 Motrix 的 MDXP 协议。推送契约是通用 aria2 JSON-RPC，设置界面以「Motrix / Aria2」命名，任何兼容 aria2 RPC 的下载器均可配置。
 _Avoid_：Motrix、MDXP、Aria2 原生
 
 **下载配置（Download Configuration）**：
