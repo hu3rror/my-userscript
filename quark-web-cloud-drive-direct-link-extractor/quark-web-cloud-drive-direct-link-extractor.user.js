@@ -2,7 +2,7 @@
 // @name                    Quark Web Cloud Drive Direct Link Extractor
 // @name:zh-CN              夸克网盘网页版直链提取器
 // @namespace               https://github.com/hu3rror
-// @version                 1.0.3
+// @version                 1.1.0
 // @description             Extract direct download links from Quark Web Cloud Drive with easy copier for Gopeed/IDM.
 // @description:zh-CN       在夸克网盘网页版中批量提取并复制文件的直接下载链接，提供外部下载器（Gopeed/IDM）专用UA与Cookie一键复制。
 // @author                  Hu3rror
@@ -13,9 +13,13 @@
 // @require                 https://lib.baomitu.com/limonte-sweetalert2/11.4.7/sweetalert2.all.min.js
 // @grant                   GM_xmlhttpRequest
 // @grant                   GM_setClipboard
+// @grant                   GM_setValue
+// @grant                   GM_getValue
 // @grant                   unsafeWindow
 // @connect                 quark.cn
 // @connect                 drive.quark.cn
+// @connect                 127.0.0.1
+// @connect                 localhost
 // @downloadURL             https://raw.githubusercontent.com/hu3rror/my-userscript/main/quark-web-cloud-drive-direct-link-extractor/quark-web-cloud-drive-direct-link-extractor.user.js
 // @updateURL               https://raw.githubusercontent.com/hu3rror/my-userscript/main/quark-web-cloud-drive-direct-link-extractor/quark-web-cloud-drive-direct-link-extractor.user.js
 // @homepageURL             https://github.com/hu3rror/my-userscript
@@ -73,6 +77,46 @@
                 background-color: #28a745;
                 color: white;
                 border-color: #28a745;
+            }
+            .okv-dropdown {
+                position: relative;
+                display: inline-block;
+            }
+            .okv-dropdown-menu {
+                display: none;
+                position: absolute;
+                top: 100%;
+                left: 0;
+                z-index: 1000;
+                min-width: 90px;
+                background: #fff;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                padding: 4px 0;
+            }
+            .okv-dropdown-menu.show {
+                display: block;
+            }
+            .okv-dropdown-item {
+                display: block;
+                width: 100%;
+                padding: 6px 14px;
+                text-align: left;
+                background: none;
+                border: none;
+                cursor: pointer;
+                font-size: 12px;
+                color: #333;
+                white-space: nowrap;
+            }
+            .okv-dropdown-item:hover {
+                background-color: #f5f5f5;
+            }
+            .okv-settings-btn {
+                padding: 4px 8px;
+                font-size: 16px;
+                line-height: 1;
             }
         `;
         const styleSheet = document.createElement("style");
@@ -146,6 +190,201 @@
         });
     };
 
+    // ================== 下载器配置管理 ==================
+    const DOWNLOADER_DEFAULTS = {
+        gopeed_host: '127.0.0.1',
+        gopeed_port: '9999',
+        gopeed_token: '',
+        motrix_endpoint: 'http://127.0.0.1:16801',
+        motrix_token: '',
+        batch_concurrency: 0
+    };
+
+    const getDownloaderConfig = () => {
+        const cfg = {};
+        for (const [key, def] of Object.entries(DOWNLOADER_DEFAULTS)) {
+            cfg[key] = GM_getValue(key, def);
+        }
+        return cfg;
+    };
+
+    const saveDownloaderConfig = (cfg) => {
+        for (const [key, value] of Object.entries(cfg)) {
+            GM_setValue(key, value);
+        }
+    };
+
+    // ================== 下载器 API 交互 ==================
+    const sendToGopeed = (url, config) => {
+        return new Promise((resolve, reject) => {
+            const endpoint = `http://${config.gopeed_host}:${config.gopeed_port}/api/v1/tasks`;
+            const headers = { 'Content-Type': 'application/json' };
+            if (config.gopeed_token) {
+                headers['X-Api-Token'] = config.gopeed_token;
+            }
+            GM_xmlhttpRequest({
+                url: endpoint,
+                method: 'POST',
+                headers: headers,
+                data: JSON.stringify({
+                    req: {
+                        url: url,
+                        extra: {
+                            header: {
+                                'User-Agent': REAL_QUARK_UA,
+                                'Cookie': document.cookie
+                            }
+                        }
+                    }
+                }),
+                onload: res => {
+                    try {
+                        resolve(JSON.parse(res.responseText));
+                    } catch (e) {
+                        resolve(res.responseText);
+                    }
+                },
+                onerror: err => reject(err)
+            });
+        });
+    };
+
+    const sendToMotrix = (url, config) => {
+        return new Promise((resolve, reject) => {
+            const endpoint = `${config.motrix_endpoint}/mdxp`;
+            const params = config.motrix_token
+                ? [`token:${config.motrix_token}`, [url], { header: [`User-Agent: ${REAL_QUARK_UA}`, `Cookie: ${document.cookie}`] }]
+                : [[url], { header: [`User-Agent: ${REAL_QUARK_UA}`, `Cookie: ${document.cookie}`] }];
+            GM_xmlhttpRequest({
+                url: endpoint,
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                data: JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: '1',
+                    method: 'aria2.addUri',
+                    params: params
+                }),
+                onload: res => {
+                    try {
+                        resolve(JSON.parse(res.responseText));
+                    } catch (e) {
+                        resolve(res.responseText);
+                    }
+                },
+                onerror: err => reject(err)
+            });
+        });
+    };
+
+    const sendSingleToDownloader = async (url, downloader, config) => {
+        if (downloader === 'gopeed') {
+            if (!config.gopeed_host || !config.gopeed_port) {
+                return { error: '请先配置 Gopeed 连接信息' };
+            }
+            return await sendToGopeed(url, config);
+        }
+        if (downloader === 'motrix') {
+            if (!config.motrix_endpoint) {
+                return { error: '请先配置 Motrix 连接信息' };
+            }
+            return await sendToMotrix(url, config);
+        }
+        return { error: `未知下载器: ${downloader}` };
+    };
+
+    const sendBatchToDownloader = async (urls, downloader, config) => {
+        const concurrency = config.batch_concurrency || urls.length;
+        const results = { success: 0, fail: 0, errors: [] };
+
+        for (let i = 0; i < urls.length; i += concurrency) {
+            const batch = urls.slice(i, i + concurrency);
+            const batchResults = await Promise.allSettled(
+                batch.map(url => sendSingleToDownloader(url, downloader, config))
+            );
+            batchResults.forEach(r => {
+                if (r.status === 'fulfilled' && !r.value.error) {
+                    results.success++;
+                } else {
+                    results.fail++;
+                    results.errors.push(r.status === 'fulfilled' ? r.value.error : r.reason);
+                }
+            });
+        }
+        return results;
+    };
+
+    const showConfigDialog = (firstTime = false) => {
+        const cfg = getDownloaderConfig();
+        const guideHtml = firstTime ? `
+            <div style="text-align:left;margin-bottom:15px;border:1px solid #ffebb8;background-color:#fffcf0;padding:10px;border-radius:6px;">
+                <p style="font-weight:bold;color:#b78103;margin:0 0 8px;">首次使用引导</p>
+                <p style="font-size:12px;color:#555;margin:0 0 4px;"><b>Gopeed</b>：设置 → 高级 → 通信协议 → 改为 TCP，记下端口号</p>
+                <p style="font-size:12px;color:#555;margin:0;">Motrix bridge 默认端口 16801，可在设置页查看</p>
+            </div>
+        ` : '';
+
+        Swal.fire({
+            title: '下载器设置',
+            html: guideHtml + `
+                <div style="text-align:left;">
+                    <h4 style="margin:0 0 8px;font-size:14px;">Gopeed</h4>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                        <div>
+                            <label style="font-size:12px;color:#666;">地址</label>
+                            <input id="swal-gopeed-host" class="swal2-input" style="margin:0;" value="${cfg.gopeed_host}">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:#666;">端口</label>
+                            <input id="swal-gopeed-port" class="swal2-input" style="margin:0;" value="${cfg.gopeed_port}">
+                        </div>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px;color:#666;">API Token（可选）</label>
+                        <input id="swal-gopeed-token" class="swal2-input" style="margin:0;" placeholder="留空则不使用" value="${cfg.gopeed_token}">
+                    </div>
+
+                    <h4 style="margin:12px 0 8px;font-size:14px;">Motrix</h4>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px;color:#666;">端点地址</label>
+                        <input id="swal-motrix-endpoint" class="swal2-input" style="margin:0;" value="${cfg.motrix_endpoint}">
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label style="font-size:12px;color:#666;">RPC Secret（可选）</label>
+                        <input id="swal-motrix-token" class="swal2-input" style="margin:0;" placeholder="留空则不使用" value="${cfg.motrix_token}">
+                    </div>
+
+                    <h4 style="margin:12px 0 8px;font-size:14px;">高级</h4>
+                    <div style="margin-bottom:4px;">
+                        <label style="font-size:12px;color:#666;">同时发送任务数（0=全部）</label>
+                        <input id="swal-batch-concurrency" class="swal2-input" style="margin:0;" type="number" min="0" value="${cfg.batch_concurrency}">
+                    </div>
+                    <p style="font-size:11px;color:#999;margin:0;">设为 0 则全部同时发送，设为 3 则每次发送 3 个任务</p>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: '保存',
+            cancelButtonText: '取消',
+            confirmButtonColor: '#00caab',
+            focusConfirm: false,
+            preConfirm: () => {
+                return {
+                    gopeed_host: document.getElementById('swal-gopeed-host').value.trim() || DOWNLOADER_DEFAULTS.gopeed_host,
+                    gopeed_port: document.getElementById('swal-gopeed-port').value.trim() || DOWNLOADER_DEFAULTS.gopeed_port,
+                    gopeed_token: document.getElementById('swal-gopeed-token').value.trim() || '',
+                    motrix_endpoint: document.getElementById('swal-motrix-endpoint').value.trim() || DOWNLOADER_DEFAULTS.motrix_endpoint,
+                    motrix_token: document.getElementById('swal-motrix-token').value.trim() || '',
+                    batch_concurrency: parseInt(document.getElementById('swal-batch-concurrency').value) || 0
+                };
+            }
+        }).then(result => {
+            if (result.isConfirmed) {
+                saveDownloaderConfig(result.value);
+                Swal.fire({ icon: 'success', title: '配置已保存', timer: 1500, showConfirmButton: false });
+            }
+        });
+    };
+
     // ================== UI 交互模块 ==================
     const quarkBtn = `
         <div class="ovk-main" style="margin-right: 10px; display: inline-block;">
@@ -161,7 +400,7 @@
 
     const generateDom = (list) => {
         let rows = "";
-        list.forEach(e => {
+        list.forEach((e, idx) => {
             rows += `
             <tr>
                 <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${e.file_name}">${e.file_name}</td>
@@ -169,12 +408,30 @@
                 <td>
                     <button class="okv-btn okv-btn-primary quark-copy-item" data-url="${e.download_url}">复制链接</button>
                     <button class="okv-btn quark-down-item" data-url="${e.download_url}">直接下载</button>
+                    <div class="okv-dropdown">
+                        <button class="okv-btn okv-dropdown-toggle" data-url="${e.download_url}" data-idx="${idx}">发送到 ▾</button>
+                        <div class="okv-dropdown-menu">
+                            <button class="okv-dropdown-item quark-send-gopeed" data-url="${e.download_url}">Gopeed</button>
+                            <button class="okv-dropdown-item quark-send-motrix" data-url="${e.download_url}">Motrix</button>
+                        </div>
+                    </div>
                 </td>
             </tr>`;
         });
 
         return `
         <div style="text-align: left; max-height: 450px; overflow-y: auto; padding: 5px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <div class="okv-dropdown">
+                    <button class="okv-btn okv-btn-primary okv-batch-send-toggle">▼ 全部发送到</button>
+                    <div class="okv-dropdown-menu">
+                        <button class="okv-dropdown-item quark-batch-gopeed">全部 → Gopeed</button>
+                        <button class="okv-dropdown-item quark-batch-motrix">全部 → Motrix</button>
+                    </div>
+                </div>
+                <button class="okv-btn okv-settings-btn" title="下载器设置">⚙️</button>
+            </div>
+
             <!-- 外部下载器使用说明 -->
             <div style="text-align: left; margin-bottom: 15px; border: 1px solid #ffebb8; background-color: #fffcf0; padding: 10px; border-radius: 6px;">
                 <details>
@@ -190,7 +447,7 @@
                             <button class="okv-btn okv-btn-primary quark-copy-ua" style="flex: 1; padding: 6px;">📋 复制客户端 UA</button>
                             <button class="okv-btn okv-btn-success quark-copy-cookie" style="flex: 1; padding: 6px;">📋 复制当前 Cookie</button>
                         </div>
-                        <p style="margin-top: 8px; font-size: 11px; color: #888;">* 提示：在 Gopeed 中新建下载时，展开“高级”选项即可分别填入链接、UA 和 Cookie。</p>
+                        <p style="margin-top: 8px; font-size: 11px; color: #888;">* 新功能！点击文件行中的"发送到"可一键将直链推送到 Gopeed 或 Motrix，无需手动复制。</p>
                     </div>
                 </details>
             </div>
@@ -211,6 +468,9 @@
     };
 
     // ================== 功能实现模块 ==================
+    // 存储最后一次提取的数据，供批量发送使用
+    let _lastData = [];
+
     const getQuarkSelectedFile = () => {
         let selectedList = [];
         try {
@@ -232,7 +492,9 @@
         return selectedList;
     };
 
-    const bindCommonEvents = () => {
+    const bindCommonEvents = (data) => {
+        if (data) _lastData = data;
+
         $(document).off("click", ".quark-down-item").on("click", ".quark-down-item", e => {
             window.open(e.target.dataset.url, "_blank");
         });
@@ -260,6 +522,130 @@
             setTimeout(() => {
                 e.target.innerText = "📋 复制当前 Cookie";
             }, 1500);
+        });
+
+        // ================== 下拉菜单切换 ==================
+        $(document).off("click", ".okv-dropdown-toggle").on("click", ".okv-dropdown-toggle", function (e) {
+            e.stopPropagation();
+            const menu = $(this).siblings(".okv-dropdown-menu");
+            $(".okv-dropdown-menu").not(menu).removeClass("show");
+            menu.toggleClass("show");
+        });
+
+        $(document).off("click", ".okv-batch-send-toggle").on("click", ".okv-batch-send-toggle", function (e) {
+            e.stopPropagation();
+            const menu = $(this).siblings(".okv-dropdown-menu");
+            $(".okv-dropdown-menu").not(menu).removeClass("show");
+            menu.toggleClass("show");
+        });
+
+        // 点击其他地方关闭下拉菜单
+        $(document).off("click.okv-close-dropdown").on("click.okv-close-dropdown", () => {
+            $(".okv-dropdown-menu").removeClass("show");
+        });
+
+        // 点击下拉菜单项不冒泡
+        $(document).off("click", ".okv-dropdown-item").on("click", ".okv-dropdown-item", function (e) {
+            e.stopPropagation();
+            $(this).closest(".okv-dropdown-menu").removeClass("show");
+        });
+
+        // ================== 单个发送到下载器 ==================
+        const handleSingleSend = async (url, downloader) => {
+            const config = getDownloaderConfig();
+            if (downloader === 'gopeed' && (!config.gopeed_host || !config.gopeed_port)) {
+                showConfigDialog(true);
+                return;
+            }
+            if (downloader === 'motrix' && !config.motrix_endpoint) {
+                showConfigDialog(true);
+                return;
+            }
+
+            Swal.fire({
+                title: '正在发送到 ' + (downloader === 'gopeed' ? 'Gopeed' : 'Motrix') + '...',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            const result = await sendSingleToDownloader(url, downloader, config);
+            Swal.close();
+
+            if (result.error) {
+                Swal.fire({ icon: 'error', title: '发送失败', text: result.error });
+            } else if (result.code !== undefined && result.code !== 0) {
+                Swal.fire({ icon: 'error', title: '发送失败', text: `下载器返回错误 (${result.code})` });
+            } else {
+                Swal.fire({ icon: 'success', title: '已发送到 ' + (downloader === 'gopeed' ? 'Gopeed' : 'Motrix'), timer: 1500, showConfirmButton: false });
+            }
+        };
+
+        $(document).off("click", ".quark-send-gopeed").on("click", ".quark-send-gopeed", function () {
+            handleSingleSend(this.dataset.url, 'gopeed');
+        });
+
+        $(document).off("click", ".quark-send-motrix").on("click", ".quark-send-motrix", function () {
+            handleSingleSend(this.dataset.url, 'motrix');
+        });
+
+        // ================== 批量发送到下载器 ==================
+        const handleBatchSend = async (downloader) => {
+            const config = getDownloaderConfig();
+            if (downloader === 'gopeed' && (!config.gopeed_host || !config.gopeed_port)) {
+                showConfigDialog(true);
+                return;
+            }
+            if (downloader === 'motrix' && !config.motrix_endpoint) {
+                showConfigDialog(true);
+                return;
+            }
+
+            const urls = _lastData.map(e => e.download_url).filter(Boolean);
+            if (urls.length === 0) {
+                Swal.fire({ icon: 'warning', title: '提示', text: '没有可发送的文件' });
+                return;
+            }
+
+            const confirm = await Swal.fire({
+                icon: 'question',
+                title: '确认批量发送',
+                text: `将 ${urls.length} 个文件发送到 ${downloader === 'gopeed' ? 'Gopeed' : 'Motrix'}，是否继续？`,
+                showCancelButton: true,
+                confirmButtonText: '发送',
+                cancelButtonText: '取消',
+                confirmButtonColor: '#00caab'
+            });
+            if (!confirm.isConfirmed) return;
+
+            Swal.fire({
+                title: '正在批量发送...',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            const results = await sendBatchToDownloader(urls, downloader, config);
+            Swal.close();
+
+            if (results.fail === 0) {
+                Swal.fire({ icon: 'success', title: '全部发送成功', text: `${results.success} 个文件已发送到 ${downloader === 'gopeed' ? 'Gopeed' : 'Motrix'}` });
+            } else if (results.success === 0) {
+                Swal.fire({ icon: 'error', title: '全部发送失败', text: `${results.fail} 个文件发送失败，请检查下载器状态` });
+            } else {
+                Swal.fire({ icon: 'warning', title: '部分成功', text: `${results.success} 成功，${results.fail} 失败` });
+            }
+        };
+
+        $(document).off("click", ".quark-batch-gopeed").on("click", ".quark-batch-gopeed", () => {
+            handleBatchSend('gopeed');
+        });
+
+        $(document).off("click", ".quark-batch-motrix").on("click", ".quark-batch-motrix", () => {
+            handleBatchSend('motrix');
+        });
+
+        // ================== 设置按钮 ==================
+        $(document).off("click", ".okv-settings-btn").on("click", ".okv-settings-btn", () => {
+            showConfigDialog();
         });
     };
 
@@ -331,7 +717,7 @@
                         confirmButtonColor: '#00caab',
                         width: '580px'
                     });
-                    bindCommonEvents();
+                    bindCommonEvents(data);
                 }).catch(err => {
                     Swal.close();
                     Swal.fire({ icon: 'error', title: '网络异常', text: err.toString() });
@@ -351,7 +737,7 @@
                 Swal.fire({
                     icon: 'info',
                     title: '提示',
-                    text: '受平台接口安全限制，分享页的文件请先“保存到我的网盘”，然后再在我的网盘里进行直链提取。'
+                    text: '受平台接口安全限制，分享页的文件请先"保存到我的网盘"，然后再在我的网盘里进行直链提取。'
                 });
             });
         }
