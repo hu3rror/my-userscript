@@ -2,9 +2,9 @@
 // @name                    Quark Web Cloud Drive Direct Link Extractor
 // @name:zh-CN              夸克网盘网页版直链提取器
 // @namespace               https://github.com/hu3rror
-// @version                 1.1.4
-// @description             Extract direct download links from Quark Web Cloud Drive with easy copier for Gopeed/IDM.
-// @description:zh-CN       在夸克网盘网页版中批量提取并复制文件的直接下载链接，提供外部下载器（Gopeed/IDM）专用UA与Cookie一键复制。
+// @version                 1.2.0
+// @description             Extract direct download links from Quark Web Cloud Drive, push to Gopeed/Motrix or copy full config (URL+UA+Cookie) for manual use.
+// @description:zh-CN       在夸克网盘网页版中批量提取文件的直接下载链接，支持一键推送至外部下载器（Gopeed/Motrix）创建下载任务，或复制链接+UA+Cookie 完整配置供手动使用。
 // @author                  Hu3rror
 // @match                   *://pan.quark.cn/*
 // @license                 MIT
@@ -34,58 +34,187 @@
     // ================== CSS 样式注入 ==================
     const injectStyles = () => {
         const styles = `
+            /* ===== 视觉变量（夸克品牌） ===== */
+            .okv-panel,
+            .swal2-popup {
+                --okv-primary: #00caab;
+                --okv-primary-hover: #00b59a;
+                --okv-primary-weak: #e6faf7;
+                --okv-text: rgba(0, 0, 0, 0.85);
+                --okv-text-secondary: rgba(0, 0, 0, 0.55);
+                --okv-border: #f0f0f0;
+            }
+
+            /* ===== Swal 全局统一（夸克视觉语言） ===== */
+            .swal2-popup {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+                border-radius: 12px;
+                padding: 24px 20px;
+            }
+            .swal2-title {
+                font-size: 18px;
+                color: var(--okv-text);
+            }
+            .swal2-styled {
+                font-size: 14px;
+                border-radius: 6px;
+                font-weight: 500;
+            }
+            .swal2-confirm {
+                background-color: var(--okv-primary) !important;
+            }
+            .swal2-confirm:hover {
+                background-color: var(--okv-primary-hover) !important;
+            }
+            .swal2-input {
+                border-radius: 6px;
+            }
+
+            /* ===== 表头工具栏 ===== */
+            .okv-toolbar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                padding: 10px 14px;
+                margin-bottom: 14px;
+                background: var(--okv-primary-weak);
+                border-radius: 8px;
+            }
+            .okv-toolbar-info {
+                font-size: 13px;
+                color: var(--okv-text);
+                white-space: nowrap;
+            }
+            .okv-toolbar-info b {
+                color: var(--okv-primary);
+                font-weight: 600;
+            }
+            .okv-toolbar-actions {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+            }
+
+            /* ===== 按钮（Ant 风格） ===== */
+            .okv-btn {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 4px;
+                height: 30px;
+                padding: 0 14px;
+                border-radius: 6px;
+                border: 1px solid transparent;
+                font-size: 13px;
+                line-height: 1;
+                cursor: pointer;
+                transition: all 0.2s;
+                white-space: nowrap;
+                user-select: none;
+            }
+            .okv-btn:active {
+                opacity: 0.85;
+            }
+            .okv-btn-sm {
+                height: 26px;
+                padding: 0 10px;
+                font-size: 12px;
+            }
+            .okv-btn-primary {
+                background: var(--okv-primary);
+                color: #fff;
+                border-color: var(--okv-primary);
+            }
+            .okv-btn-primary:hover {
+                background: var(--okv-primary-hover);
+                border-color: var(--okv-primary-hover);
+            }
+            .okv-btn-default {
+                background: #fff;
+                color: var(--okv-text);
+                border-color: #d9d9d9;
+            }
+            .okv-btn-default:hover {
+                color: var(--okv-primary);
+                border-color: var(--okv-primary);
+            }
+            .okv-btn-link {
+                background: transparent;
+                color: var(--okv-primary);
+                border-color: transparent;
+                padding: 0 8px;
+            }
+            .okv-btn-link:hover {
+                background: var(--okv-primary-weak);
+            }
+
+            /* ===== 文件列表 ===== */
+            .okv-table-wrap {
+                max-height: 360px;
+                overflow-y: auto;
+            }
             .okv-table {
                 width: 100%;
                 border-collapse: collapse;
                 font-size: 13px;
-                margin-top: 10px;
             }
             .okv-table th {
-                background-color: #f5f5f5;
-                font-weight: bold;
-                padding: 8px;
-                border-bottom: 2px solid #ddd;
+                position: sticky;
+                top: 0;
+                z-index: 1;
+                padding: 10px 12px;
                 text-align: left;
-                color: #333;
+                font-weight: 500;
+                color: var(--okv-text-secondary);
+                background: #fafafa;
+                border-bottom: 1px solid var(--okv-border);
+                white-space: nowrap;
             }
             .okv-table td {
-                padding: 8px;
-                border-bottom: 1px solid #eee;
-                text-align: left;
-                color: #555;
+                padding: 10px 12px;
+                border-bottom: 1px solid var(--okv-border);
+                color: var(--okv-text);
+                vertical-align: middle;
             }
-            .okv-btn {
+            .okv-table tbody tr {
+                transition: background 0.15s;
+            }
+            .okv-table tbody tr:hover {
+                background: #f6fffd;
+            }
+            .okv-table tbody tr:last-child td {
+                border-bottom: none;
+            }
+            .okv-file-name {
                 display: inline-block;
-                padding: 4px 10px;
-                margin: 2px;
-                border-radius: 4px;
-                border: 1px solid #ccc;
-                background: #fff;
-                cursor: pointer;
+                max-width: 220px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                vertical-align: middle;
+            }
+            .okv-row-actions {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                white-space: nowrap;
+            }
+
+            /* ===== 底部提示 ===== */
+            .okv-hint {
+                margin-top: 12px;
                 font-size: 12px;
-                transition: all 0.2s;
+                color: var(--okv-text-secondary);
+                line-height: 1.6;
             }
-            .okv-btn:hover {
-                opacity: 0.9;
-            }
-            .okv-btn-primary {
-                background-color: #00caab;
-                color: white;
-                border-color: #00caab;
-            }
-            .okv-btn-success {
-                background-color: #28a745;
-                color: white;
-                border-color: #28a745;
-            }
-            .okv-settings-btn {
-                padding: 4px 8px;
-                font-size: 16px;
-                line-height: 1;
-            }
+
+            /* ===== 发送到选择菜单 ===== */
             .okv-pick-btn {
                 width: 100%;
-                padding: 10px;
+                height: 40px;
                 margin: 4px 0;
                 font-size: 14px;
             }
@@ -397,7 +526,7 @@
     // ================== UI 交互模块 ==================
     const quarkBtn = `
         <div class="ovk-main" style="margin-right: 10px; display: inline-block;">
-            <button type="button" class="ant-btn btn-file okv-btn-direct" style="display: inline-flex; align-items: center; justify-content: center; background-color: #00caab; color: white; border: none; border-radius: 4px; padding: 4px 15px; height: 32px; font-weight: 500; cursor: pointer;">
+            <button type="button" class="ant-btn btn-file okv-btn-direct" style="display: inline-flex; align-items: center; justify-content: center; background-color: #00caab; color: white; border: none; border-radius: 6px; padding: 4px 15px; height: 32px; font-weight: 500; cursor: pointer;">
                 <svg width="16" height="16" viewBox="0 0 22 22" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 2-2M11 3v10"/>
                     <path d="M14 8h1.553c.85 0 1.16.093 1.47.267.311.174.556.43.722.756.166.326.255.65.255 1.54v4.873c0 .892-.089 1.215-.255 1.54-.166.327-.41.583-.722.757-.31.174-.62.267-1.47.267H6.447c-.85 0-1.16-.093-1.47-.267a1.778 1.778 0 01-.722-.756c-.166-.326-.255-.65-.255-1.54v-4.873c0-.892.089-1.215.255-1.54.166-.327.41-.583.722-.757.31-.174.62-.267 1.47-.267H11"/>
@@ -408,60 +537,50 @@
     `;
 
     const generateDom = (list) => {
+        const totalSize = list.reduce((sum, e) => sum + (e.size || 0), 0);
         let rows = "";
         list.forEach(e => {
             rows += `
             <tr>
-                <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${e.file_name}">${e.file_name}</td>
+                <td><span class="okv-file-name" title="${e.file_name}">${e.file_name}</span></td>
                 <td>${sizeFormat(e.size)}</td>
                 <td>
-                    <button class="okv-btn okv-btn-primary quark-copy-item" data-url="${e.download_url}">复制链接</button>
-                    <button class="okv-btn quark-down-item" data-url="${e.download_url}">直接下载</button>
-                    <button class="okv-btn quark-send-to" data-url="${e.download_url}">发送到</button>
+                    <div class="okv-row-actions">
+                        <button class="okv-btn okv-btn-primary okv-btn-sm quark-send-to" data-url="${e.download_url}">发送到</button>
+                        <button class="okv-btn okv-btn-default okv-btn-sm quark-down-item" data-url="${e.download_url}">直接下载</button>
+                        <button class="okv-btn okv-btn-link okv-btn-sm quark-copy-config" data-url="${e.download_url}">复制配置</button>
+                    </div>
                 </td>
             </tr>`;
         });
 
         return `
-        <div style="text-align: left; max-height: 450px; overflow-y: auto; padding: 5px;">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-                <button class="okv-btn okv-btn-primary quark-batch-gopeed">全部 → Gopeed</button>
-                <button class="okv-btn okv-btn-primary quark-batch-motrix">全部 → Motrix</button>
-                <button class="okv-btn okv-settings-btn" title="下载器设置">⚙️</button>
+        <div class="okv-panel">
+            <div class="okv-toolbar">
+                <div class="okv-toolbar-info">共 <b>${list.length}</b> 个文件 · 总大小 <b>${sizeFormat(totalSize)}</b></div>
+                <div class="okv-toolbar-actions">
+                    <button class="okv-btn okv-btn-primary okv-btn-sm quark-batch-gopeed">发送到 Gopeed</button>
+                    <button class="okv-btn okv-btn-primary okv-btn-sm quark-batch-motrix">发送到 Motrix</button>
+                    <button class="okv-btn okv-btn-default okv-btn-sm okv-settings-btn" title="下载器设置">⚙ 设置</button>
+                </div>
             </div>
 
-            <!-- 外部下载器使用说明 -->
-            <div style="text-align: left; margin-bottom: 15px; border: 1px solid #ffebb8; background-color: #fffcf0; padding: 10px; border-radius: 6px;">
-                <details>
-                    <summary style="cursor: pointer; font-weight: bold; color: #b78103;">👉 Gopeed / IDM / Motrix 外部下载器配置（避免403）</summary>
-                    <div style="margin-top: 10px; font-size: 12px; color: #555; line-height: 1.6;">
-                        <p>直链强绑定您当前的登录状态，在下载器中创建任务时<b>必须同时满足</b>以下两项：</p>
-                        <ol style="margin-left: 15px; margin-top: 5px;">
-                            <li><b>User-Agent (UA)</b> 设置为官方完整客户端 UA（点击下方按钮复制）</li>
-                            <li><b>标头/Headers</b> 中添加当前账号的 <code>Cookie</code>（点击下方按钮复制）</li>
-                        </ol>
-
-                        <div style="margin-top: 10px; display: flex; gap: 8px;">
-                            <button class="okv-btn okv-btn-primary quark-copy-ua" style="flex: 1; padding: 6px;">📋 复制客户端 UA</button>
-                            <button class="okv-btn okv-btn-success quark-copy-cookie" style="flex: 1; padding: 6px;">📋 复制当前 Cookie</button>
-                        </div>
-                        <p style="margin-top: 8px; font-size: 11px; color: #888;">* 新功能！点击文件行中的"发送到"可一键将直链推送到 Gopeed 或 Motrix，无需手动复制。</p>
-                    </div>
-                </details>
+            <div class="okv-table-wrap">
+                <table class="okv-table">
+                    <thead>
+                        <tr>
+                            <th>文件名</th>
+                            <th>大小</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
             </div>
 
-            <table class="okv-table">
-                <thead>
-                    <tr>
-                        <th>文件名</th>
-                        <th>大小</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rows}
-                </tbody>
-            </table>
+            <div class="okv-hint">复制配置：一次复制 链接 + UA + Cookie，供 IDM 等未接入下载器手动添加任务</div>
         </div>`;
     };
 
@@ -497,28 +616,13 @@
             window.open(e.target.dataset.url, "_blank");
         });
 
-        $(document).off("click", ".quark-copy-item").on("click", ".quark-copy-item", e => {
-            GM_setClipboard(e.target.dataset.url);
-            e.target.innerText = "复制成功";
+        // 复制配置（链接 + UA + Cookie，供未接入下载器手动添加任务）
+        $(document).off("click", ".quark-copy-config").on("click", ".quark-copy-config", e => {
+            const text = `URL: ${e.target.dataset.url}\nUser-Agent: ${REAL_QUARK_UA}\nCookie: ${document.cookie}`;
+            GM_setClipboard(text);
+            e.target.innerText = "已复制";
             setTimeout(() => {
-                e.target.innerText = "复制链接";
-            }, 1500);
-        });
-
-        // 外部配置复制逻辑
-        $(document).off("click", ".quark-copy-ua").on("click", ".quark-copy-ua", e => {
-            GM_setClipboard(REAL_QUARK_UA);
-            e.target.innerText = "UA 复制成功";
-            setTimeout(() => {
-                e.target.innerText = "📋 复制客户端 UA";
-            }, 1500);
-        });
-
-        $(document).off("click", ".quark-copy-cookie").on("click", ".quark-copy-cookie", e => {
-            GM_setClipboard(document.cookie);
-            e.target.innerText = "Cookie 复制成功";
-            setTimeout(() => {
-                e.target.innerText = "📋 复制当前 Cookie";
+                e.target.innerText = "复制配置";
             }, 1500);
         });
 
@@ -528,7 +632,7 @@
             Swal.fire({
                 title: '发送到下载器',
                 html: `
-                    <div style="padding: 5px;">
+                    <div class="okv-panel" style="padding: 5px;">
                         <button id="okv-pick-gopeed" class="okv-btn okv-btn-primary okv-pick-btn">Gopeed</button>
                         <button id="okv-pick-motrix" class="okv-btn okv-btn-primary okv-pick-btn">Motrix</button>
                     </div>`,
@@ -701,7 +805,7 @@
                         showConfirmButton: true,
                         confirmButtonText: '关闭',
                         confirmButtonColor: '#00caab',
-                        width: '580px'
+                        width: '720px'
                     });
                     bindCommonEvents(data);
                 }).catch(err => {
