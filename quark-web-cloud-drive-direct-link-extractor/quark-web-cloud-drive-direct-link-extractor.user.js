@@ -2,7 +2,7 @@
 // @name                    Quark Web Cloud Drive Direct Link Extractor
 // @name:zh-CN              夸克网盘网页版直链提取器
 // @namespace               https://github.com/hu3rror
-// @version                 1.1.1
+// @version                 1.1.2
 // @description             Extract direct download links from Quark Web Cloud Drive with easy copier for Gopeed/IDM.
 // @description:zh-CN       在夸克网盘网页版中批量提取并复制文件的直接下载链接，提供外部下载器（Gopeed/IDM）专用UA与Cookie一键复制。
 // @author                  Hu3rror
@@ -166,8 +166,9 @@
         gopeed_host: '127.0.0.1',
         gopeed_port: '9999',
         gopeed_token: '',
-        motrix_endpoint: 'http://127.0.0.1:16801',
-        motrix_token: '',
+        motrix_host: '127.0.0.1',
+        motrix_port: '16800',
+        motrix_secret: '',
         motrix_save_dir: '',
         batch_concurrency: 0
     };
@@ -223,28 +224,26 @@
 
     const sendToMotrix = (url, config) => {
         return new Promise((resolve, reject) => {
-            const endpoint = `${config.motrix_endpoint}/mdxp`;
-            const headers = { 'Content-Type': 'application/json' };
-            if (config.motrix_token) {
-                headers['Authorization'] = `Bearer ${config.motrix_token}`;
-            }
+            const endpoint = `http://${config.motrix_host}:${config.motrix_port}/jsonrpc`;
+            const options = {
+                dir: config.motrix_save_dir,
+                header: [
+                    `User-Agent: ${REAL_QUARK_UA}`,
+                    `Cookie: ${document.cookie}`
+                ]
+            };
+            const params = config.motrix_secret
+                ? ['token:' + config.motrix_secret, [url], options]
+                : [[url], options];
             GM_xmlhttpRequest({
                 url: endpoint,
                 method: 'POST',
-                headers: headers,
+                headers: { 'Content-Type': 'application/json' },
                 data: JSON.stringify({
                     jsonrpc: '2.0',
                     id: 1,
-                    method: 'download/add',
-                    params: {
-                        kind: 'url',
-                        saveDir: config.motrix_save_dir,
-                        uris: [url],
-                        headers: [
-                            { name: 'User-Agent', value: REAL_QUARK_UA },
-                            { name: 'Cookie', value: document.cookie }
-                        ]
-                    }
+                    method: 'aria2.addUri',
+                    params: params
                 }),
                 onload: res => {
                     try {
@@ -266,7 +265,7 @@
             return await sendToGopeed(url, config);
         }
         if (downloader === 'motrix') {
-            if (!config.motrix_endpoint || !config.motrix_save_dir) {
+            if (!config.motrix_host || !config.motrix_port || !config.motrix_save_dir) {
                 return { error: '请先配置 Motrix 连接信息及下载目录' };
             }
             return await sendToMotrix(url, config);
@@ -301,8 +300,8 @@
             <div style="text-align:left;margin-bottom:15px;border:1px solid #ffebb8;background-color:#fffcf0;padding:10px;border-radius:6px;">
                 <p style="font-weight:bold;color:#b78103;margin:0 0 8px;">首次使用引导</p>
                 <p style="font-size:12px;color:#555;margin:0 0 4px;"><b>Gopeed</b>：设置 → 高级 → 通信协议 → 改为 TCP，记下端口号</p>
-                <p style="font-size:12px;color:#555;margin:0 0 4px;"><b>Motrix</b>：填写 bridge 地址（默认端口 16801）和下载目录</p>
-                <p style="font-size:12px;color:#555;margin:0;">如 Motrix 设置了 Token，在端点地址旁填入（留空则不使用）</p>
+                <p style="font-size:12px;color:#555;margin:0 0 4px;"><b>Motrix（Next）</b>：填 RPC 端口（默认 16800）和下载目录</p>
+                <p style="font-size:12px;color:#555;margin:0;">如 Motrix 设置了 RPC Secret，填在 Secret 栏（留空则不使用）</p>
             </div>
         ` : '';
 
@@ -326,14 +325,20 @@
                         <input id="swal-gopeed-token" class="swal2-input" style="margin:0;" placeholder="留空则不使用" value="${cfg.gopeed_token}">
                     </div>
 
-                    <h4 style="margin:12px 0 8px;font-size:14px;">Motrix</h4>
-                    <div style="margin-bottom:12px;">
-                        <label style="font-size:12px;color:#666;">端点地址</label>
-                        <input id="swal-motrix-endpoint" class="swal2-input" style="margin:0;" value="${cfg.motrix_endpoint}">
+                    <h4 style="margin:12px 0 8px;font-size:14px;">Motrix (Next)</h4>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+                        <div>
+                            <label style="font-size:12px;color:#666;">地址</label>
+                            <input id="swal-motrix-host" class="swal2-input" style="margin:0;" value="${cfg.motrix_host}">
+                        </div>
+                        <div>
+                            <label style="font-size:12px;color:#666;">RPC 端口</label>
+                            <input id="swal-motrix-port" class="swal2-input" style="margin:0;" value="${cfg.motrix_port}">
+                        </div>
                     </div>
                     <div style="margin-bottom:12px;">
-                        <label style="font-size:12px;color:#666;">Token（可选）</label>
-                        <input id="swal-motrix-token" class="swal2-input" style="margin:0;" placeholder="留空则不使用" value="${cfg.motrix_token}">
+                        <label style="font-size:12px;color:#666;">RPC Secret（可选）</label>
+                        <input id="swal-motrix-secret" class="swal2-input" style="margin:0;" placeholder="留空则不使用" value="${cfg.motrix_secret}">
                     </div>
                     <div style="margin-bottom:12px;">
                         <label style="font-size:12px;color:#666;">下载目录（必填）</label>
@@ -358,8 +363,9 @@
                     gopeed_host: document.getElementById('swal-gopeed-host').value.trim() || DOWNLOADER_DEFAULTS.gopeed_host,
                     gopeed_port: document.getElementById('swal-gopeed-port').value.trim() || DOWNLOADER_DEFAULTS.gopeed_port,
                     gopeed_token: document.getElementById('swal-gopeed-token').value.trim() || '',
-                    motrix_endpoint: document.getElementById('swal-motrix-endpoint').value.trim() || DOWNLOADER_DEFAULTS.motrix_endpoint,
-                    motrix_token: document.getElementById('swal-motrix-token').value.trim() || '',
+                    motrix_host: document.getElementById('swal-motrix-host').value.trim() || DOWNLOADER_DEFAULTS.motrix_host,
+                    motrix_port: document.getElementById('swal-motrix-port').value.trim() || DOWNLOADER_DEFAULTS.motrix_port,
+                    motrix_secret: document.getElementById('swal-motrix-secret').value.trim() || '',
                     motrix_save_dir: document.getElementById('swal-motrix-save-dir').value.trim() || '',
                     batch_concurrency: parseInt(document.getElementById('swal-batch-concurrency').value) || 0
                 };
@@ -532,7 +538,7 @@
                 showConfigDialog(true);
                 return;
             }
-            if (downloader === 'motrix' && (!config.motrix_endpoint || !config.motrix_save_dir)) {
+            if (downloader === 'motrix' && (!config.motrix_host || !config.motrix_port || !config.motrix_save_dir)) {
                 showConfigDialog(true);
                 return;
             }
@@ -564,7 +570,7 @@
                 showConfigDialog(true);
                 return;
             }
-            if (downloader === 'motrix' && (!config.motrix_endpoint || !config.motrix_save_dir)) {
+            if (downloader === 'motrix' && (!config.motrix_host || !config.motrix_port || !config.motrix_save_dir)) {
                 showConfigDialog(true);
                 return;
             }
