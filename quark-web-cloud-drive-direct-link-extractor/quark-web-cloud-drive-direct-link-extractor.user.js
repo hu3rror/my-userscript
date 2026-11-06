@@ -2,7 +2,7 @@
 // @name                    Quark Web Cloud Drive Direct Link Extractor
 // @name:zh-CN              夸克网盘网页版直链提取器
 // @namespace               https://github.com/hu3rror
-// @version                 1.2.2
+// @version                 1.3.0
 // @description             Extract direct download links from Quark Web Cloud Drive, push to Gopeed/Motrix or copy full config (URL+UA+Cookie) for manual use.
 // @description:zh-CN       在夸克网盘网页版中批量提取文件的直接下载链接，支持一键推送至外部下载器（Gopeed/Motrix）创建下载任务，或复制链接+UA+Cookie 完整配置供手动使用。
 // @author                  Hu3rror
@@ -334,16 +334,16 @@
     };
 
     // ================== API 接口交互 ==================
-    const quarkDirect = (fids) => {
+    const quarkRequest = (method, url, body) => {
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
-                url: "https://drive.quark.cn/1/clouddrive/file/download?pr=ucpro&fr=pc",
-                method: "POST",
+                url,
+                method,
                 headers: {
                     "Content-Type": "application/json; charset=utf-8",
                     "User-Agent": "quark-cloud-drive"
                 },
-                data: JSON.stringify({ fids: fids }),
+                data: body === undefined ? undefined : JSON.stringify(body),
                 onload: res => {
                     try {
                         resolve(JSON.parse(res.responseText));
@@ -355,6 +355,46 @@
             });
         });
     };
+
+    const quarkDirect = (fids) => quarkRequest(
+        "POST",
+        "https://drive.quark.cn/1/clouddrive/file/download?pr=ucpro&fr=pc",
+        { fids }
+    );
+
+    // 他人分享的文件不在当前账号网盘里，私有下载接口对这类 fid 回 21001；分享协议见 docs/adr/0002
+    const SHARE_API = "https://drive-h.quark.cn/1/clouddrive";
+    const SHARE_ROOT_PDIR_FID = "0";
+    const SHARE_PAGE_SIZE = 100;
+
+    const quarkShareRequest = async (method, path, body) => {
+        const res = await quarkRequest(method, `${SHARE_API}${path}`, body);
+        if (!res || typeof res !== "object") return { ok: false, message: "分享接口返回异常" };
+        if (res.code !== 0) {
+            return { ok: false, code: res.code, message: res.message || `直链解析异常 (${res.code})` };
+        }
+        return { ok: true, data: res.data || {} };
+    };
+
+    const quarkShareToken = (pwd_id, passcode) => quarkShareRequest(
+        "POST",
+        "/share/sharepage/token?pr=ucpro&fr=pc&uc_param_str=",
+        { pwd_id, passcode, support_visit_limit_private_share: true }
+    );
+
+    const quarkShareDetail = (pwd_id, stoken, pdir_fid, page) => quarkShareRequest(
+        "GET",
+        "/share/sharepage/detail?pr=ucpro&fr=pc&uc_param_str=&ver=2" +
+        `&pwd_id=${encodeURIComponent(pwd_id)}&stoken=${encodeURIComponent(stoken)}` +
+        `&pdir_fid=${encodeURIComponent(pdir_fid)}&force=0&_page=${page}&_size=${SHARE_PAGE_SIZE}` +
+        "&_fetch_banner=0&_fetch_share=0&_fetch_total=1"
+    );
+
+    const quarkShareDownload = (pwd_id, stoken, fids, fids_token) => quarkShareRequest(
+        "POST",
+        "/file/share/download?pr=ucpro&fr=pc&uc_param_str=",
+        { fids, fids_token, pwd_id, stoken }
+    );
 
     // ================== 下载器配置管理 ==================
     const DOWNLOADER_DEFAULTS = {
@@ -684,6 +724,93 @@
         return selectedList;
     };
 
+    const pickSelectedFiles = () => {
+        const selectList = getQuarkSelectedFile();
+        if (selectList.length === 0) {
+            Swal.fire({ icon: "warning", title: "提示", text: "请先勾选要提取直链的文件！" });
+            return null;
+        }
+        const files = selectList.filter(e => e.file);
+        if (files.length === 0) {
+            Swal.fire({ icon: "warning", title: "提示", text: "暂不支持文件夹提取直链，请选择文件！" });
+            return null;
+        }
+        return files;
+    };
+
+    const getShareContext = () => {
+        const pwd_id = window.location.pathname.split("/").filter(Boolean)[1] || "";
+        const dirMatch = window.location.hash.match(/^#\/list\/share\/([^/?#]+)/);
+        const query = new URLSearchParams(window.location.search);
+        return {
+            pwd_id,
+            pdir_fid: dirMatch ? dirMatch[1] : SHARE_ROOT_PDIR_FID,
+            passcode: query.get("pwd") || query.get("passcode") || ""
+        };
+    };
+
+    const askPasscode = async (message) => {
+        const { value } = await Swal.fire({
+            icon: "warning",
+            title: "需要提取码",
+            text: message,
+            input: "text",
+            inputPlaceholder: "请输入分享提取码",
+            showCancelButton: true,
+            cancelButtonText: "取消",
+            confirmButtonText: "确定"
+        });
+        return value ? String(value).trim() : "";
+    };
+
+    const collectShareTokens = async (files, pwd_id, stoken, pdir_fid) => {
+        const tokenByFid = {};
+        const missing = () => files.filter(e => !tokenByFid[e.fid]);
+        for (let page = 1; page <= 20; page++) {
+            const detail = await quarkShareDetail(pwd_id, stoken, pdir_fid, page);
+            if (!detail.ok) return detail;
+            const list = detail.data.list || [];
+            list.forEach(item => { tokenByFid[item.fid] = item.share_fid_token; });
+            if (list.length < SHARE_PAGE_SIZE || missing().length === 0) break;
+        }
+        return { ok: true, tokenByFid };
+    };
+
+    const quarkShareDirect = async (files) => {
+        const { pwd_id, pdir_fid, passcode } = getShareContext();
+        let token = await quarkShareToken(pwd_id, passcode);
+        if (!token.ok && !passcode) {
+            const typed = await askPasscode(token.message);
+            if (!typed) return token;
+            token = await quarkShareToken(pwd_id, typed);
+        }
+        if (!token.ok) return token;
+
+        const stoken = token.data.stoken;
+        if (!stoken) return { ok: false, message: "分享链接已失效或需要提取码" };
+
+        const collected = await collectShareTokens(files, pwd_id, stoken, pdir_fid);
+        if (!collected.ok) return collected;
+
+        const { tokenByFid } = collected;
+        const absent = files.filter(e => !tokenByFid[e.fid]);
+        if (absent.length === files.length) {
+            return { ok: false, message: "未找到所选文件的分享凭证，请刷新页面后重试" };
+        }
+        if (absent.length > 0) {
+            return {
+                ok: false,
+                message: `以下文件不在当前分享目录中，请回到所在目录后重试：${absent.map(e => e.file_name).join("、")}`
+            };
+        }
+        return quarkShareDownload(
+            pwd_id,
+            stoken,
+            files.map(e => e.fid),
+            files.map(e => tokenByFid[e.fid])
+        );
+    };
+
     const bindCommonEvents = (data) => {
         if (data) _lastData = data;
 
@@ -862,96 +989,112 @@
         });
     };
 
-    const initButton = (selector, btnHtml) => {
-        autoLazyload(() => $(selector).length > 0, () => {
-            if ($(selector).find(".okv-btn-direct").length === 0) {
-                $(selector).prepend(btnHtml);
+    // 夸克走 hash 路由，location.href 里的 hash 也会带 /list（如 /s/xxx#/list/share/yyy），
+    // 只看 href 会把分享预览页误判成我的网盘，于是拿分享 fid 去调私有网盘接口拿到 21001
+    const getPageKind = () => {
+        const { pathname, hash } = window.location;
+        if (pathname.startsWith("/s/")) return "share-preview";
+        if (!pathname.startsWith("/list") && !hash.includes("/list")) return "other";
+        return hash.includes("myshare") ? "my-shares" : "my-drive";
+    };
+
+    // 站点改版换过 class，逐个回退
+    const SHARE_TOOLBAR_SELECTORS = [".file-info-share-buttom", ".file-info-share-button", ".share-btns", ".btn-operate"];
+
+    const initButton = (selectors, btnHtml) => {
+        const candidates = [].concat(selectors);
+        autoLazyload(() => $(candidates.join(", ")).length > 0, () => {
+            const target = candidates.find(s => $(s).length > 0);
+            if (target && $(target).find(".okv-btn-direct").length === 0) {
+                $(target).prepend(btnHtml);
             }
         }, 0.5);
     };
 
     const run = () => {
-        let url = window.location.href;
-        let selector = "";
-        let btn = "";
+        const kind = getPageKind();
 
-        if (url.includes("/list")) {
-            if (!url.includes("myshare")) {
-                // 我的网盘文件列表页面
-                selector = ".btn-operate";
-            } else {
-                // 我的分享列表页面
-                selector = ".tabs-container";
-            }
-            btn = quarkBtn;
-            initButton(selector, btn);
-
-            // 绑定提取直链事件
-            $(document).off("click", ".okv-btn-direct").on("click", ".okv-btn-direct", () => {
-                let selectList = getQuarkSelectedFile();
-                if (selectList.length === 0) {
-                    Swal.fire({ icon: 'warning', title: '提示', text: '请先勾选要提取直链的文件！' });
-                    return;
-                }
-                if (selectList.filter(e => e.file).length === 0) {
-                    Swal.fire({ icon: 'warning', title: '提示', text: '暂不支持文件夹提取直链，请选择文件！' });
-                    return;
-                }
-                let fids = selectList.filter(e => e.file).map(e => e.fid);
+        if (kind === "share-preview") {
+            initButton(SHARE_TOOLBAR_SELECTORS, quarkBtn);
+            $(document).off("click", ".okv-btn-direct").on("click", ".okv-btn-direct", async () => {
+                const files = pickSelectedFiles();
+                if (!files) return;
 
                 Swal.fire({
-                    title: '正在提取直链...',
+                    title: "正在提取直链...",
                     allowOutsideClick: false,
                     didOpen: () => {
                         Swal.showLoading();
                     }
                 });
 
-                quarkDirect(fids).then(res => {
+                try {
+                    const res = await quarkShareDirect(files);
                     Swal.close();
-                    if (res.code === 31001) {
-                        Swal.fire({ icon: 'error', title: '错误', text: '提取失败，请先登录网页端夸克网盘！' });
+                    if (!res.ok) {
+                        const loginNeeded = res.code === 31001;
+                        Swal.fire({
+                            icon: "error",
+                            title: "错误",
+                            text: loginNeeded ? "提取失败，请先登录网页端夸克网盘！" : (res.message || `直链解析异常 (${res.code})`)
+                        });
                         return;
                     }
-                    if (res.code !== 0) {
-                        Swal.fire({ icon: 'error', title: '错误', text: `直链解析异常 (${res.code})` });
-                        return;
-                    }
-                    let data = res.data.map(e => {
+                    showResultPanel(res.data.map(e => {
                         e.cookie = document.cookie;
                         return e;
-                    });
-
-                    showResultPanel(data);
-                }).catch(err => {
+                    }));
+                } catch (err) {
                     Swal.close();
-                    Swal.fire({ icon: 'error', title: '网络异常', text: err.toString() });
-                });
+                    Swal.fire({ icon: "error", title: "网络异常", text: err.toString() });
+                }
             });
-
-        } else if (url.includes("/s/")) {
-            // 他人分享链接预览页面
-            selector = ".file-info-share-buttom";
-            if ($(selector).length === 0) {
-                selector = ".file-info-share-button";
-            }
-            btn = quarkBtn;
-            initButton(selector, btn);
-
-            $(document).off("click", ".okv-btn-direct").on("click", ".okv-btn-direct", () => {
-                Swal.fire({
-                    icon: 'info',
-                    title: '提示',
-                    text: '受平台接口安全限制，分享页的文件请先"保存到我的网盘"，然后再在我的网盘里进行直链提取。'
-                });
-            });
+            return;
         }
+
+        if (kind === "other") return;
+
+        initButton(kind === "my-drive" ? ".btn-operate" : ".tabs-container", quarkBtn);
+
+        $(document).off("click", ".okv-btn-direct").on("click", ".okv-btn-direct", () => {
+            const files = pickSelectedFiles();
+            if (!files) return;
+            let fids = files.map(e => e.fid);
+            Swal.fire({
+                title: '正在提取直链...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            quarkDirect(fids).then(res => {
+                Swal.close();
+                if (res.code === 31001) {
+                    Swal.fire({ icon: 'error', title: '错误', text: '提取失败，请先登录网页端夸克网盘！' });
+                    return;
+                }
+                if (res.code !== 0) {
+                    Swal.fire({ icon: 'error', title: '错误', text: `直链解析异常 (${res.code})` });
+                    return;
+                }
+                let data = res.data.map(e => {
+                    e.cookie = document.cookie;
+                    return e;
+                });
+
+                showResultPanel(data);
+            }).catch(err => {
+                Swal.close();
+                Swal.fire({ icon: 'error', title: '网络异常', text: err.toString() });
+            });
+        });
     };
 
     let _firstUseGuided = false;
     const maybeGuideFirstUse = () => {
         if (_firstUseGuided) return;
-        if (!window.location.href.includes('/list')) return;
+        if (!["my-drive", "my-shares"].includes(getPageKind())) return;
         if (GM_getValue('okv_config_initialized', false)) return;
         if (GM_getValue('okv_guided', false)) return;
         _firstUseGuided = true;

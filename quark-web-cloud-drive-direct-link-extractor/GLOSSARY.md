@@ -31,11 +31,14 @@ API 返回的包含鉴权信息的实际下载地址。通常扩展名被移除�
 _Avoid_：选中、勾选
 
 **分享预览（Share Preview）**：
-他人分享链接的只读页面（`/s/` 路径）。此页面不支持直链提取，需先"保存到我的网盘"。
+他人分享链接的只读页面（`/s/` 路径）。页面路径里的 pwd_id 不含当前账号的网盘上下文，提取走分享协议（见「分享 API」）。
 _Avoid_：分享页、分享链接
 
 **我的网盘（My Cloud Drive）**：
-用户已登录的私有网盘空间（`/list` 路径）。直链提取仅在此页面可用。
+用户已登录的私有网盘空间（`/list` 路径）。此页面与「我的分享」用私有 API 提取。
+
+**我的分享（My Shares）**：
+用户自己创建的分享链接列表（`/list#/list/myshare`）。与「我的网盘」同源，提取走私有 API。
 
 **直接下载（Direct Download）**：
 使用浏览器自带下载直接下载直链。单线程、速度受限，仅适合小文件。
@@ -76,7 +79,10 @@ HTTP 请求头中的认证凭据。绑定了当前登录用户的身份，直链
 React 的内部渲染机制。脚本通过遍历 DOM 节点的 `__reactFiber$` 属性来获取文件列表组件实例及其属性。
 
 **夸克 API（Quark Drive API）**：
-`POST https://drive.quark.cn/1/clouddrive/file/download`。接受 FID 列表，返回下载 URL 列表。响应 code 0 表示成功，31001 表示未登录。
+`POST https://drive.quark.cn/1/clouddrive/file/download`。接受 FID 列表，返回下载 URL 列表。响应 code 0 表示成功，31001 表示未登录。只对当前账号网盘里的 FID 有效，他人分享的文件会回 21001。
+
+**分享 API（Share API）**：
+`drive-h.quark.cn` 上的分享协议，三步：`sharepage/token` 用 pwd_id 换 stoken → `sharepage/detail` 按 stoken + pdir_fid 列出目录项，每项带自己的分享凭证 `share_fid_token` → `file/share/download` 提交 fids + fids_token + pwd_id + stoken 换下载 URL。缺任一凭证都会失败，用分享 fid 调私有 API 则回 21001。
 
 **CSS 作用域（CSS Scope）**：
 脚本注入的样式使用 `okv-` 前缀命名空间，避免与夸克原生样式冲突。
