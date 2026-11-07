@@ -470,7 +470,23 @@
         });
     };
 
-    const sendToMotrix = (url, config) => {
+    // 直链 URL 的 basename 是票据哈希，落盘名只能取夸克给的文件名；这里只替换 Windows 拒绝落盘的字符
+    const OUT_NAME_ILLEGAL = /[\x00-\x1f\\/:*?"<>|]/g;
+    const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
+    const toOutName = (file_name) => {
+        const name = String(file_name || '').replace(OUT_NAME_ILLEGAL, '_').replace(/[ .]+$/, '');
+        if (!name) return '';
+        return WINDOWS_RESERVED_NAME.test(name.split('.')[0]) ? '_' + name : name;
+    };
+
+    const escapeAttr = (s) => String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    const sendToMotrix = (url, out, config) => {
         return new Promise((resolve, reject) => {
             const endpoint = `http://${config.motrix_host}:${config.motrix_port}/jsonrpc`;
             const options = {
@@ -479,6 +495,11 @@
                     `Cookie: ${document.cookie}`
                 ]
             };
+            // 目标已存在时让任务显式失败，避免 aria2 改名成 name.1.7z.001 破坏分卷链
+            options['auto-file-renaming'] = 'false';
+            if (out) {
+                options.out = out;
+            }
             if (config.motrix_save_dir) {
                 options.dir = config.motrix_save_dir;
             }
@@ -507,7 +528,7 @@
         });
     };
 
-    const sendSingleToDownloader = async (url, downloader, config) => {
+    const sendSingleToDownloader = async (url, downloader, config, out) => {
         const cfgError = validateDownloaderConfig(downloader, config);
         if (cfgError) {
             return { error: cfgError };
@@ -517,7 +538,7 @@
                 return await sendToGopeed(url, config);
             }
             if (downloader === 'motrix') {
-                return await sendToMotrix(url, config);
+                return await sendToMotrix(url, out, config);
             }
         } catch (err) {
             return { error: err && err.message ? err.message : String(err) };
@@ -525,14 +546,14 @@
         return { error: `未知下载器: ${downloader}` };
     };
 
-    const sendBatchToDownloader = async (urls, downloader, config) => {
-        const concurrency = config.batch_concurrency || urls.length;
+    const sendBatchToDownloader = async (entries, downloader, config) => {
+        const concurrency = config.batch_concurrency || entries.length;
         const results = { success: 0, fail: 0, errors: [] };
 
-        for (let i = 0; i < urls.length; i += concurrency) {
-            const batch = urls.slice(i, i + concurrency);
+        for (let i = 0; i < entries.length; i += concurrency) {
+            const batch = entries.slice(i, i + concurrency);
             const batchResults = await Promise.allSettled(
-                batch.map(url => sendSingleToDownloader(url, downloader, config))
+                batch.map(entry => sendSingleToDownloader(entry.url, downloader, config, entry.out))
             );
             batchResults.forEach(r => {
                 if (r.status === 'fulfilled' && !r.value.error) {
@@ -661,7 +682,7 @@
                 <td>${sizeFormat(e.size)}</td>
                 <td>
                     <div class="okv-row-actions">
-                        <button class="okv-btn okv-btn-primary okv-btn-sm quark-send-to" data-url="${e.download_url}">发送到</button>
+                        <button class="okv-btn okv-btn-primary okv-btn-sm quark-send-to" data-url="${e.download_url}" data-name="${escapeAttr(e.file_name)}">发送到</button>
                         <button class="okv-btn okv-btn-default okv-btn-sm quark-down-item" data-url="${e.download_url}">直接下载</button>
                         <button class="okv-btn okv-btn-link okv-btn-sm quark-copy-config" data-url="${e.download_url}">复制配置</button>
                     </div>
@@ -826,6 +847,7 @@
         // ================== 发送到下载器（选择菜单） ==================
         $(document).off("click", ".quark-send-to").on("click", ".quark-send-to", function () {
             const url = this.dataset.url;
+            const out = toOutName(this.dataset.name);
             Swal.fire({
                 title: '发送到下载器',
                 html: `
@@ -842,14 +864,14 @@
                     };
                     document.getElementById('okv-pick-motrix').onclick = () => {
                         Swal.close();
-                        handleSingleSend(url, 'motrix');
+                        handleSingleSend(url, 'motrix', out);
                     };
                 }
             });
         });
 
         // ================== 单个发送到下载器 ==================
-        const handleSingleSend = async (url, downloader) => {
+        const handleSingleSend = async (url, downloader, out) => {
             const config = getDownloaderConfig();
             const cfgError = validateDownloaderConfig(downloader, config);
             if (cfgError) {
@@ -864,7 +886,7 @@
                 didOpen: () => Swal.showLoading()
             });
 
-            const result = await sendSingleToDownloader(url, downloader, config);
+            const result = await sendSingleToDownloader(url, downloader, config, out);
             Swal.close();
 
             if (result.error) {
@@ -887,16 +909,29 @@
             }
             const name = DOWNLOADER_NAMES[downloader] || downloader;
 
-            const urls = _lastData.map(e => e.download_url).filter(Boolean);
-            if (urls.length === 0) {
+            const entries = _lastData
+                .map(e => ({ url: e.download_url, out: toOutName(e.file_name) }))
+                .filter(e => e.url);
+            if (entries.length === 0) {
                 Swal.fire({ icon: 'warning', title: '提示', text: '没有可发送的文件' });
+                return;
+            }
+            const duplicated = entries
+                .map(e => e.out)
+                .filter((out, i, all) => out && all.indexOf(out) !== i);
+            if (duplicated.length > 0) {
+                Swal.fire({
+                    icon: 'error',
+                    title: '文件名重复',
+                    text: `以下文件重命名后同名，请先改名再发送：${[...new Set(duplicated)].join('、')}`
+                });
                 return;
             }
 
             const confirm = await Swal.fire({
                 icon: 'question',
                 title: '确认批量发送',
-                text: `将 ${urls.length} 个文件发送到 ${name}，是否继续？`,
+                text: `将 ${entries.length} 个文件发送到 ${name}，是否继续？`,
                 showCancelButton: true,
                 confirmButtonText: '发送',
                 cancelButtonText: '取消',
@@ -910,7 +945,7 @@
                 didOpen: () => Swal.showLoading()
             });
 
-            const results = await sendBatchToDownloader(urls, downloader, config);
+            const results = await sendBatchToDownloader(entries, downloader, config);
             Swal.close();
 
             if (results.fail === 0) {

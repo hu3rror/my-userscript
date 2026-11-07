@@ -64,6 +64,14 @@ _Avoid_：复制链接（纯链接粘贴到下载器会 403）
 脚本实际对接的下载器（Tauri + Aria2 Next 重写版）。通过 aria2 JSON-RPC（`/jsonrpc`，默认端口 16800）接入，兼容旧版 Motrix，不兼容官方新版 Motrix 的 MDXP 协议。推送契约是通用 aria2 JSON-RPC，设置界面以「Motrix / Aria2」命名，任何兼容 aria2 RPC 的下载器均可配置。
 _Avoid_：Motrix、MDXP、Aria2 原生
 
+**哈希文件名（Hash Filename）**：
+直链 URL 的路径段只是票据哈希，不含原文件名与扩展名。下载器按 URL basename 命名时，任务名和落盘文件名都变成这串哈希。
+_Avoid_：乱码名、随机名
+
+**输出文件名（Output Name）**：
+aria2 `addUri` 的 `out` 选项值，决定任务落盘时的文件名，相对 `dir` 解析。脚本用它把夸克的文件名交给下载器，替代从 URL basename 推导的哈希名。
+_Avoid_：保存名、目标名、自定义名
+
 **下载配置（Download Configuration）**：
 在外部下载器中使用直链时必须提供的两项认证信息：UA 和 Cookie。缺少任一都会导致 403。
 
