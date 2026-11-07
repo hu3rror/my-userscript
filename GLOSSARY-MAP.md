@@ -12,4 +12,4 @@
 | `send-to-memos/` | — |
 | `steamdb-dlc-extractor/` | SteamDB DLC 清单生成器。从 SteamDB 页面提取 DLC 列表，按模板生成解锁工具（OpenSteamTool 等）所需的清单文件。 |
 
-每个子文件夹有各自的 `CONTEXT.md`，描述该脚本的用途、功能、技术实现等。
+每个子文件夹有各自的 `GLOSSARY.md`，描述该脚本的用途、功能、技术实现等。

@@ -12,4 +12,4 @@ Default triage labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-f
 
 ### Domain docs
 
-Multi-context: `CONTEXT-MAP.md` at root points to per-folder `CONTEXT.md` files. See `docs/agents/domain.md`.
+Multi-context: `GLOSSARY-MAP.md` at root points to per-folder `GLOSSARY.md` files. See `docs/agents/domain.md`.
