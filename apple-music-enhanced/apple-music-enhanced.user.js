@@ -100,10 +100,6 @@
         .region-switcher:hover {
             background-color: #2c2c2e;
         }
-        .region-switcher:before {
-            content: '🌍';
-            margin-right: 5px;
-        }
         .region-switcher:focus {
             outline: none;
             box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
@@ -200,8 +196,16 @@
 
     // Get Album ID from URL
     function getAlbumId(url) {
-        const match = url.match(/\/album\/.*?\/(\d+)(?:\?i=\d+)?$/);
+        const match = new URL(url).pathname.match(/\/album\/[^/]*\/(\d+)\/?$/);
         return match ? match[1] : null;
+    }
+
+    // Replace the storefront code in the path, keeping host, query and hash intact
+    function withRegion(url, code) {
+        return url.replace(
+            /^([a-z]+:\/\/[^/]+)(?:\/[a-z]{2}(?=[/?#]|$))?/i,
+            (_, origin) => `${origin}/${code}`
+        );
     }
 
     // Add buttons to the page
@@ -269,12 +273,7 @@
         manualSwitchInput.addEventListener('keydown', function (event) {
             if (event.key === 'Enter' && this.value.trim() !== '') {
                 const regionCode = this.value.trim().toLowerCase();
-                const currentUrl = window.location.href;
-                const newUrl = currentUrl.replace(
-                    /\/\/music\.apple\.com\/[a-z]{2}/,
-                    `//music.apple.com/${regionCode}`
-                );
-                window.location.href = newUrl;
+                window.location.href = withRegion(window.location.href, regionCode);
             }
         });
 
@@ -294,12 +293,7 @@
                 manualSwitchInput.focus();
             } else if (this.value) {
                 // Switch to a predefined region
-                const currentUrl = window.location.href;
-                const newUrl = currentUrl.replace(
-                    /\/\/music\.apple\.com\/[a-z]{2}/,
-                    `//music.apple.com/${this.value}`
-                );
-                window.location.href = newUrl;
+                window.location.href = withRegion(window.location.href, this.value);
             }
         });
 
@@ -311,12 +305,7 @@
         // Add region copy buttons
         regions.forEach(region => {
             const regionCopyButton = createButton(region.name, function () {
-                const currentUrl = window.location.href.split('?')[0];
-                const newUrl = currentUrl.replace(
-                    /\/\/music\.apple\.com\/[a-z]{2}/,
-                    `//music.apple.com/${region.code}`
-                );
-                GM_setClipboard(newUrl);
+                GM_setClipboard(withRegion(window.location.href, region.code));
                 showFeedback(i18n.regionLinkCopied(region.fullName));
             }, i18n.copyRegionLinkTitle(region.fullName));
             container.appendChild(regionCopyButton);
@@ -332,12 +321,7 @@
         manualCopyInput.addEventListener('keydown', function (event) {
             if (event.key === 'Enter' && this.value.trim() !== '') {
                 const regionCode = this.value.trim().toLowerCase();
-                const currentUrl = window.location.href.split('?')[0];
-                const newUrl = currentUrl.replace(
-                    /\/\/music\.apple\.com\/[a-z]{2}/,
-                    `//music.apple.com/${regionCode}`
-                );
-                GM_setClipboard(newUrl);
+                GM_setClipboard(withRegion(window.location.href, regionCode));
                 showFeedback(i18n.regionLinkCopied(regionCode.toUpperCase()));
                 this.value = ''; // Clear input after copying
             }
@@ -360,15 +344,5 @@
 
     // Initialization
     persistentlyAddButtons();
-
-    // Listen for URL changes
-    let lastUrl = location.href;
-    new MutationObserver(() => {
-        const url = location.href;
-        if (url !== lastUrl) {
-            lastUrl = url;
-            setTimeout(addButtons, 1000);
-        }
-    }).observe(document, { subtree: true, childList: true });
 
 })();
