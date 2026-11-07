@@ -4,7 +4,7 @@
 
 | 子文件夹 | 描述 |
 |---------|------|
-| `apple-music-enhanced/` | — |
+| `apple-music-enhanced/` | Apple Music 链接助手。补齐苹果网页播放器缺少的链接工具：复制专辑 ID、按区域复制链接、按区域跳转。 |
 | `google-custom-time-range/` | — |
 | `jump-to-deepwiki/` | — |
 | `old-driver-legend-rb/` | — |

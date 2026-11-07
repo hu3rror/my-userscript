@@ -4,7 +4,7 @@
 // @name:zh-TW              Apple Music 連結助手
 // @name:ja                 Apple Music リンク助手
 // @namespace               https://github.com/hu3rror/my-userscript
-// @version                 2.4.2
+// @version                 2.5.0
 // @description             Copy ID, switch regions, and copy links for different countries on Apple Music.
 // @description:zh-CN       快速复制 Apple Music 页面 ID、切换或复制不同国家/地区的歌曲链接。
 // @description:zh-TW       快速複製 Apple Music 頁面 ID、切換或複製不同國家/地區的歌曲連結。
@@ -27,44 +27,41 @@
         'en': {
             copyId: 'Copy ID',
             idCopied: 'ID Copied',
-            idNotFound: 'ID Not Found',
             copyAlbumIdTitle: 'Copy Album ID',
+            copyLink: 'Copy Link',
             switchRegion: 'Switch Region',
             manualInput: 'Manual Input...',
             manualInputHint: 'Enter region & press Enter',
             copyLinkHint: 'Enter region to copy link',
-            regionLinkCopied: (regionName) => `${regionName} link copied`,
-            copyRegionLinkTitle: (regionName) => `Copy ${regionName} Link`
+            regionLinkCopied: (regionName) => `${regionName} link copied`
         },
         'zh': {
             copyId: '复制ID',
             idCopied: 'ID已复制',
-            idNotFound: '未找到ID',
             copyAlbumIdTitle: '复制专辑ID',
+            copyLink: '复制链接',
             switchRegion: '切换地区',
             manualInput: '手动输入...',
             manualInputHint: '输入地区简称后回车',
             copyLinkHint: '输入地区简称回车复制',
-            regionLinkCopied: (regionName) => `${regionName} 链接已复制`,
-            copyRegionLinkTitle: (regionName) => `复制 ${regionName} 链接`
+            regionLinkCopied: (regionName) => `${regionName} 链接已复制`
         },
         'ja': {
             copyId: 'IDコピー',
             idCopied: 'IDをコピーしました',
-            idNotFound: 'IDが見つかりません',
             copyAlbumIdTitle: 'アルバムIDをコピー',
+            copyLink: 'リンクをコピー',
             switchRegion: '地域を切り替え',
             manualInput: '手動入力...',
             manualInputHint: '地域を入力してEnter',
             copyLinkHint: '地域を入力してEnterでコピー',
-            regionLinkCopied: (regionName) => `${regionName} のリンクをコピーしました`,
-            copyRegionLinkTitle: (regionName) => `${regionName} のリンクをコピー`
+            regionLinkCopied: (regionName) => `${regionName} のリンクをコピーしました`
         }
     };
 
     function getLang() {
         const lang = navigator.language.split('-')[0];
-        return translations[lang] ? lang : 'en'; // Default to English
+        return translations[lang] ? lang : 'en';
     }
 
     const lang = getLang();
@@ -72,8 +69,6 @@
 
     // --- End of i18n ---
 
-
-    // Define available regions
     const regions = [
         { name: '🇭🇰', code: 'hk', fullName: 'Hongkong' },
         { name: '🇯🇵', code: 'jp', fullName: 'Japan' },
@@ -83,49 +78,42 @@
 
     // Add styles
     GM_addStyle(`
-        .region-switcher {
+        .region-switcher,
+        .custom-button,
+        .region-input {
             background-color: #1c1c1e;
             border: 1px solid #3c3c3e;
-            color: white;
+            color: #fff;
             font-size: 14px;
             font-family: inherit;
             padding: 8px 16px;
             border-radius: 16px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
+            box-sizing: border-box;
+            margin-right: 10px;
             transition: background-color 0.3s;
-            margin-right: 10px;
         }
-        .region-switcher:hover {
-            background-color: #2c2c2e;
-        }
-        .region-switcher:focus {
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
-        }
-        .region-switcher option {
-            background-color: #1c1c1e;
-            color: white;
-            padding: 8px;
-        }
+        .region-switcher,
         .custom-button {
-            background-color: #1d1d1f;
-            border: 1px solid #3c3c3e;
-            color: #fff;
-            font-size: 14px;
-            font-weight: bold;
-            padding: 8px 16px;
-            border-radius: 16px;
+            height: 36px;
             cursor: pointer;
-            margin-right: 10px;
-            transition: background-color 0.3s, transform 0.1s;
         }
+        .region-switcher:hover,
         .custom-button:hover {
             background-color: #2c2c2e;
         }
         .custom-button:active {
             transform: scale(0.95);
+        }
+        .region-switcher:focus,
+        .custom-button:focus,
+        .region-input:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+        }
+        .region-switcher option {
+            background-color: #1c1c1e;
+            color: #fff;
+            padding: 8px;
         }
         .feedback-message {
             position: fixed;
@@ -147,26 +135,14 @@
             flex-wrap: wrap;
         }
         .region-input {
-            background-color: #1d1d1f;
-            border: 1px solid #3c3c3e;
-            color: #fff;
-            font-size: 14px;
             padding: 8px 12px;
-            border-radius: 16px;
-            margin-right: 10px;
             width: 180px;
-            box-sizing: border-box;
         }
         .region-input::placeholder {
             color: #8e8e93;
         }
-        .region-input:focus {
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
-        }
     `);
 
-    // Create a generic button
     function createButton(text, onClick, title) {
         const button = document.createElement('button');
         button.textContent = text;
@@ -176,7 +152,6 @@
         return button;
     }
 
-    // Show feedback message
     function showFeedback(message) {
         const existingFeedback = document.querySelector('.feedback-message');
         if (existingFeedback) {
@@ -194,13 +169,12 @@
         }, 2000);
     }
 
-    // Get Album ID from URL
+    // Album ID is the numeric path segment; ?i= carries the song ID and is not part of it.
     function getAlbumId(url) {
         const match = new URL(url).pathname.match(/\/album\/[^/]*\/(\d+)\/?$/);
         return match ? match[1] : null;
     }
 
-    // Replace the storefront code in the path, keeping host, query and hash intact
     function withRegion(url, code) {
         return url.replace(
             /^([a-z]+:\/\/[^/]+)(?:\/[a-z]{2}(?=[/?#]|$))?/i,
@@ -208,141 +182,125 @@
         );
     }
 
-    // Add buttons to the page
-    function addButtons() {
-        // Check if the button container already exists
-        const existingContainer = document.querySelector('#buttons-container');
-        if (existingContainer) return;
+    function regionLabel(code) {
+        const region = regions.find((entry) => entry.code === code);
+        return region ? region.fullName : code.toUpperCase();
+    }
 
-        // Find the insertion point
-        const previewButton = document.querySelector('button[data-testid="click-action"]');
-        if (!previewButton) return;
+    function createRegionSelect(labelText) {
+        const select = document.createElement('select');
+        select.className = 'region-switcher';
+        select.setAttribute('aria-label', labelText);
 
-        // Create a container for the buttons
-        const container = document.createElement('div');
-        container.id = 'buttons-container';
-
-        // Add "Copy ID" button
-        const copyIdButton = createButton(i18n.copyId, function () {
-            const albumId = getAlbumId(window.location.href);
-            if (albumId) {
-                GM_setClipboard(albumId);
-                showFeedback(i18n.idCopied);
-            } else {
-                showFeedback(i18n.idNotFound);
-            }
-        }, i18n.copyAlbumIdTitle);
-        container.appendChild(copyIdButton);
-
-        // --- Feature 1: Region Switcher with Manual Input ---
-
-        // Create region switcher dropdown
-        const regionSwitcher = document.createElement('select');
-        regionSwitcher.className = 'region-switcher';
-
-        // Add default option
         const defaultOption = document.createElement('option');
-        defaultOption.textContent = i18n.switchRegion;
+        defaultOption.textContent = labelText;
         defaultOption.value = '';
         defaultOption.disabled = true;
         defaultOption.selected = true;
-        regionSwitcher.appendChild(defaultOption);
+        select.appendChild(defaultOption);
 
-        // Add region options
-        regions.forEach(region => {
+        regions.forEach((region) => {
             const option = document.createElement('option');
             option.value = region.code;
             option.textContent = `${region.name} ${region.fullName}`;
-            regionSwitcher.appendChild(option);
+            select.appendChild(option);
         });
 
-        // Add manual input option
         const manualOption = document.createElement('option');
         manualOption.value = 'manual';
         manualOption.textContent = i18n.manualInput;
-        regionSwitcher.appendChild(manualOption);
+        select.appendChild(manualOption);
 
-        // Create manual input field (initially hidden)
-        const manualSwitchInput = document.createElement('input');
-        manualSwitchInput.type = 'text';
-        manualSwitchInput.className = 'region-input';
-        manualSwitchInput.placeholder = i18n.manualInputHint;
-        manualSwitchInput.style.display = 'none'; // Hide it initially
+        return select;
+    }
 
-        // Event listener for the manual input
-        manualSwitchInput.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter' && this.value.trim() !== '') {
-                const regionCode = this.value.trim().toLowerCase();
-                window.location.href = withRegion(window.location.href, regionCode);
+    function createManualInput(placeholder) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'region-input';
+        input.placeholder = placeholder;
+        input.style.display = 'none';
+        return input;
+    }
+
+    // The select and the manual input share one slot: only one of them is visible.
+    function pairWithManualInput(select, input, onRegion) {
+        const closeManual = () => {
+            input.value = '';
+            input.style.display = 'none';
+            select.style.display = '';
+            select.selectedIndex = 0;
+        };
+
+        select.addEventListener('change', () => {
+            if (select.value === 'manual') {
+                select.style.display = 'none';
+                input.style.display = '';
+                input.focus();
+            } else if (select.value) {
+                onRegion(select.value);
+                select.selectedIndex = 0;
             }
         });
 
-        // Event listener for when the input loses focus
-        manualSwitchInput.addEventListener('blur', function () {
-            this.style.display = 'none';
-            regionSwitcher.style.display = '';
-            regionSwitcher.value = ''; // Reset dropdown
+        input.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            const code = input.value.trim().toLowerCase();
+            if (!code) return;
+            onRegion(code);
+            closeManual();
         });
 
-        // Add region switch event listener for the dropdown
-        regionSwitcher.addEventListener('change', function () {
-            if (this.value === 'manual') {
-                // Switch to manual input mode
-                this.style.display = 'none';
-                manualSwitchInput.style.display = '';
-                manualSwitchInput.focus();
-            } else if (this.value) {
-                // Switch to a predefined region
-                window.location.href = withRegion(window.location.href, this.value);
-            }
+        input.addEventListener('blur', () => {
+            if (input.style.display !== 'none') closeManual();
         });
+    }
 
-        container.appendChild(regionSwitcher);
-        container.appendChild(manualSwitchInput);
+    function addButtons() {
+        const previewButton = document.querySelector('button[data-testid="click-action"]');
+        if (!previewButton) return;
 
-        // --- End of Feature 1 ---
+        const albumId = getAlbumId(window.location.href);
+        const existingContainer = document.querySelector('#buttons-container');
+        if (existingContainer) {
+            const hasCopyIdButton = Boolean(existingContainer.querySelector('button'));
+            if (hasCopyIdButton === Boolean(albumId)) return;
+            existingContainer.remove();
+        }
 
-        // Add region copy buttons
-        regions.forEach(region => {
-            const regionCopyButton = createButton(region.name, function () {
-                GM_setClipboard(withRegion(window.location.href, region.code));
-                showFeedback(i18n.regionLinkCopied(region.fullName));
-            }, i18n.copyRegionLinkTitle(region.fullName));
-            container.appendChild(regionCopyButton);
+        const container = document.createElement('div');
+        container.id = 'buttons-container';
+
+        if (albumId) {
+            container.appendChild(createButton(i18n.copyId, function () {
+                const currentAlbumId = getAlbumId(window.location.href);
+                if (!currentAlbumId) return;
+                GM_setClipboard(currentAlbumId);
+                showFeedback(i18n.idCopied);
+            }, i18n.copyAlbumIdTitle));
+        }
+
+        const copySelect = createRegionSelect(i18n.copyLink);
+        const copyInput = createManualInput(i18n.copyLinkHint);
+        pairWithManualInput(copySelect, copyInput, (code) => {
+            GM_setClipboard(withRegion(window.location.href, code));
+            showFeedback(i18n.regionLinkCopied(regionLabel(code)));
         });
+        container.appendChild(copySelect);
+        container.appendChild(copyInput);
 
-        // --- Feature 2: Manual Copy Link Input ---
-
-        const manualCopyInput = document.createElement('input');
-        manualCopyInput.type = 'text';
-        manualCopyInput.className = 'region-input';
-        manualCopyInput.placeholder = i18n.copyLinkHint;
-
-        manualCopyInput.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter' && this.value.trim() !== '') {
-                const regionCode = this.value.trim().toLowerCase();
-                GM_setClipboard(withRegion(window.location.href, regionCode));
-                showFeedback(i18n.regionLinkCopied(regionCode.toUpperCase()));
-                this.value = ''; // Clear input after copying
-            }
+        const switchSelect = createRegionSelect(i18n.switchRegion);
+        const switchInput = createManualInput(i18n.manualInputHint);
+        pairWithManualInput(switchSelect, switchInput, (code) => {
+            window.location.href = withRegion(window.location.href, code);
         });
+        container.appendChild(switchSelect);
+        container.appendChild(switchInput);
 
-        container.appendChild(manualCopyInput);
-
-        // --- End of Feature 2 ---
-
-
-        // Insert the button container into the page
         previewButton.parentNode.insertAdjacentElement('afterend', container);
     }
 
-    // Persistently check and add buttons
-    function persistentlyAddButtons() {
-        addButtons();
-        setTimeout(persistentlyAddButtons, 1000);
-    }
-
-    // Initialization
-    persistentlyAddButtons();
+    addButtons();
+    setInterval(addButtons, 1000);
 
 })();
