@@ -2,7 +2,7 @@
 // @name                    Quark Web Cloud Drive Direct Link Extractor
 // @name:zh-CN              夸克网盘网页版直链提取器
 // @namespace               https://github.com/hu3rror
-// @version                 1.3.0
+// @version                 1.3.1
 // @description             Extract direct download links from Quark Web Cloud Drive, push to Gopeed/Motrix or copy full config (URL+UA+Cookie) for manual use.
 // @description:zh-CN       在夸克网盘网页版中批量提取文件的直接下载链接，支持一键推送至外部下载器（Gopeed/Motrix）创建下载任务，或复制链接+UA+Cookie 完整配置供手动使用。
 // @author                  Hu3rror
